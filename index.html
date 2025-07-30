@@ -56,8 +56,8 @@
 
     <!-- 로딩 오버레이 -->
     <div id="loading-overlay" class="hidden">
-        <div class="spinner"></div>
-        <p class="text-lg text-gray-300">데이터를 불러오는 중...</p>
+        <div id="loading-spinner" class="spinner"></div>
+        <p id="loading-text" class="text-lg text-gray-300 text-center">데이터를 불러오는 중...</p>
     </div>
 
     <!-- 메인 앱 컨테이너 -->
@@ -203,11 +203,11 @@
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">패치노트</h2></div>
                 <div class="mt-6 space-y-8 text-gray-300 max-h-[60vh] overflow-y-auto pr-4">
                      <div class="patch-note-item">
-                        <h3 class="text-xl font-bold text-green-400">v11.1 <span class="text-sm font-normal text-gray-400">(2025-07-31)</span></h3>
+                        <h3 class="text-xl font-bold text-green-400">v11.2 <span class="text-sm font-normal text-gray-400">(2025-07-31)</span></h3>
                         <ul class="list-disc list-inside mt-2 space-y-1">
+                             <li><strong class="text-white">로딩 타임아웃 기능 추가</strong>: 데이터 로딩이 10초 이상 지연될 경우, 사용자에게 Firestore 보안 규칙 확인을 안내하는 메시지를 표시합니다.</li>
                              <li><strong class="text-white">ReferenceError 해결</strong>: 누락되었던 핵심 기능 함수들을 모두 복원하여 앱이 정상적으로 작동하도록 수정했습니다.</li>
                             <li><strong class="text-white">Google 로그인 기능 도입</strong>: 익명 로그인 대신 Google 계정으로 로그인하여 리그에 참여합니다.</li>
-                            <li><strong class="text-white">UI/UX 개선</strong>: 로그인 화면을 추가하고, 로그인 시 사용자 프로필(이름, 사진)을 표시합니다.</li>
                         </ul>
                     </div>
                 </div>
@@ -237,7 +237,6 @@
             messagingSenderId: "968817010937",
             appId: "1:968817010937:web:7b6c15923a91cdc3eeda28"
         };
-
         // =================================================================================
 
         // Firebase 앱 초기화
@@ -260,6 +259,7 @@
         let currentGameMode = 'double_up';
         let customTeamAssignment = { teams: [], selectedPlayerId: null };
         let unsubscribe; 
+        let loadingTimeout;
 
         // === 로그인 및 인증 처리 ===
         const handleGoogleLogin = () => {
@@ -276,25 +276,74 @@
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                // 사용자가 로그인한 경우
+                console.log("✅ 인증 성공:", user.displayName);
                 $('#login-screen').classList.add('hidden');
                 $('#app-container').classList.remove('hidden');
                 $('#loading-overlay').classList.remove('hidden');
+                $('#loading-spinner').classList.remove('hidden');
+                $('#loading-text').textContent = '데이터를 불러오는 중...';
                 
                 $('#user-name').textContent = user.displayName;
                 $('#user-photo').src = user.photoURL;
 
                 initializeAndListen();
+
+                clearTimeout(loadingTimeout);
+                loadingTimeout = setTimeout(() => {
+                    if (!$('#loading-overlay').classList.contains('hidden')) {
+                        console.error("⏰ 로딩 타임아웃: Firestore 연결을 확인하세요.");
+                        $('#loading-spinner').classList.add('hidden');
+                        $('#loading-text').innerHTML = '데이터 로딩이 지연되고 있습니다. <br> Firestore 보안 규칙을 확인해주세요.';
+                    }
+                }, 10000);
+
             } else {
-                // 사용자가 로그아웃한 경우
+                console.log("👻 로그아웃 상태입니다.");
                 $('#login-screen').classList.remove('hidden');
                 $('#app-container').classList.add('hidden');
                 $('#loading-overlay').classList.add('hidden');
-                if (unsubscribe) unsubscribe(); // 리스너 구독 해제
+                if (unsubscribe) unsubscribe();
+                clearTimeout(loadingTimeout);
             }
         });
         
-        // === [복원] 뷰 관리, 데이터 처리, 렌더링, 이벤트 핸들러 함수들 ===
+        // === 데이터 처리 (Firebase 연동) ===
+        const leagueDocRef = () => doc(db, "leagues", "main");
+
+        const initializeAndListen = () => {
+            console.log("👂 Firestore 데이터 수신을 시작합니다...");
+            if (unsubscribe) unsubscribe(); 
+
+            unsubscribe = onSnapshot(leagueDocRef(), (docSnap) => {
+                console.log("📦 Firestore 스냅샷 수신!", { exists: docSnap.exists() });
+                clearTimeout(loadingTimeout);
+                if (docSnap.exists()) {
+                    leagueData = docSnap.data();
+                } else {
+                    console.log("📄 문서 없음, 기본 데이터 구조로 초기화합니다.");
+                    const initialData = {
+                        currentSeason: 1,
+                        seasons: {
+                            "1": { masterPlayerList: {}, groups: {}, gameHistory: [] }
+                        }
+                    };
+                    setDoc(leagueDocRef(), initialData).then(() => { 
+                        console.log("✨ 기본 문서 생성 완료!");
+                        leagueData = initialData; 
+                    });
+                }
+                updateUIWithNewData();
+                $('#loading-overlay').classList.add('hidden');
+            }, (error) => {
+                clearTimeout(loadingTimeout);
+                console.error("❌ Firestore 데이터 수신 에러:", error);
+                $('#loading-spinner').classList.add('hidden');
+                $('#loading-text').textContent = '데이터 연결에 실패했습니다. Firebase 설정을 확인해주세요.';
+            });
+            console.log("✅ Firestore 리스너가 성공적으로 연결되었습니다.");
+        };
+
+        // === [복원] 뷰 관리, 렌더링, 이벤트 핸들러 등 모든 함수 ===
         const views = ['team-generator-view', 'ranking-view', 'result-section', 'record-view', 'custom-team-view', 'player-management-view', 'patch-notes-view', 'data-management-view', 'history-view'];
         const switchView = (targetView) => {
             views.forEach(viewId => {
@@ -314,32 +363,6 @@
             if (targetView === 'ranking-view') renderRankingList();
             if (targetView === 'player-management-view') renderPlayerManagementView();
             if (targetView === 'history-view') renderGameHistory();
-        };
-        
-        const leagueDocRef = () => doc(db, "leagues", "main");
-
-        const initializeAndListen = () => {
-            if (unsubscribe) unsubscribe(); 
-
-            unsubscribe = onSnapshot(leagueDocRef(), (docSnap) => {
-                if (docSnap.exists()) {
-                    leagueData = docSnap.data();
-                } else {
-                    console.log("데이터 없음, 기본 구조로 초기화합니다.");
-                    const initialData = {
-                        currentSeason: 1,
-                        seasons: {
-                            "1": { masterPlayerList: {}, groups: {}, gameHistory: [] }
-                        }
-                    };
-                    setDoc(leagueDocRef(), initialData).then(() => { leagueData = initialData; });
-                }
-                updateUIWithNewData();
-                $('#loading-overlay').classList.add('hidden');
-            }, (error) => {
-                console.error("데이터 수신 에러:", error);
-                $('#loading-overlay').innerHTML = '<p class="text-red-400">데이터 연결에 실패했습니다. Firebase 설정을 확인해주세요.</p>';
-            });
         };
 
         const updateUIWithNewData = () => {
