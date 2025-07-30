@@ -27,19 +27,7 @@
             display: flex; align-items: center; justify-content: center; z-index: 9999;
             flex-direction: column; gap: 1rem;
         }
-        .spinner {
-            width: 56px; height: 56px;
-            border: 6px solid #4B5563;
-            border-bottom-color: #10B981;
-            border-radius: 50%;
-            display: inline-block;
-            box-sizing: border-box;
-            animation: rotation 1s linear infinite;
-        }
-        @keyframes rotation {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        #progress-bar { transition: width 0.1s ease-in-out; }
     </style>
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
@@ -56,8 +44,17 @@
 
     <!-- 로딩 오버레이 -->
     <div id="loading-overlay" class="hidden">
-        <div id="loading-spinner" class="spinner"></div>
-        <p id="loading-text" class="text-lg text-gray-300 text-center">데이터를 불러오는 중...</p>
+        <div class="w-full max-w-xs">
+            <div class="w-full bg-gray-700 rounded-full h-4 mb-2">
+                <div id="progress-bar" class="bg-gradient-to-r from-cyan-400 to-green-500 h-4 rounded-full" style="width: 0%"></div>
+            </div>
+            <p id="loading-text" class="text-sm text-gray-300 text-center">연결 중... <span id="progress-percent">0</span>%</p>
+        </div>
+        <!-- 진단 로그 표시 영역 -->
+        <div id="diag-log-container" class="mt-4 w-full max-w-xs text-left text-xs bg-gray-900/50 p-2 rounded-md h-32 overflow-y-auto font-mono">
+            <p class="text-gray-400">진단 로그:</p>
+            <div id="diag-log"></div>
+        </div>
     </div>
 
     <!-- 메인 앱 컨테이너 -->
@@ -203,11 +200,9 @@
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">패치노트</h2></div>
                 <div class="mt-6 space-y-8 text-gray-300 max-h-[60vh] overflow-y-auto pr-4">
                      <div class="patch-note-item">
-                        <h3 class="text-xl font-bold text-green-400">v11.2 <span class="text-sm font-normal text-gray-400">(2025-07-31)</span></h3>
+                        <h3 class="text-xl font-bold text-green-400">v12.1 <span class="text-sm font-normal text-gray-400">(2025-07-31)</span></h3>
                         <ul class="list-disc list-inside mt-2 space-y-1">
-                             <li><strong class="text-white">로딩 타임아웃 기능 추가</strong>: 데이터 로딩이 10초 이상 지연될 경우, 사용자에게 Firestore 보안 규칙 확인을 안내하는 메시지를 표시합니다.</li>
-                             <li><strong class="text-white">ReferenceError 해결</strong>: 누락되었던 핵심 기능 함수들을 모두 복원하여 앱이 정상적으로 작동하도록 수정했습니다.</li>
-                            <li><strong class="text-white">Google 로그인 기능 도입</strong>: 익명 로그인 대신 Google 계정으로 로그인하여 리그에 참여합니다.</li>
+                            <li><strong class="text-white">진단 로그 기능 추가</strong>: 로딩 화면에 상세한 진단 로그를 표시하여 문제 원인을 쉽게 파악할 수 있도록 개선했습니다.</li>
                         </ul>
                     </div>
                 </div>
@@ -248,10 +243,6 @@
         // === 상수 및 전역 변수 ===
         const $ = (selector) => document.querySelector(selector);
         
-        const DEFAULT_RATING = 1000;
-        const SOLO_POINTS = { 8: [30, 20, 10, 5, -5, -10, -20, -30], 6: [25, 15, 5, -5, -15, -25], 4: [20, 5, -5, -20], 2: [10, -10] };
-        const DOUBLE_UP_POINTS = { 1: 25, 2: 10, 3: -10, 4: -25 };
-
         let leagueData = {}; 
         let currentPlayers = [];
         let gameTeams = [];
@@ -259,13 +250,26 @@
         let currentGameMode = 'double_up';
         let customTeamAssignment = { teams: [], selectedPlayerId: null };
         let unsubscribe; 
-        let loadingTimeout;
+        let loadingInterval;
+
+        // === [추가] 진단 로그 함수 ===
+        const diagLog = $('#diag-log');
+        const logToScreen = (message, isError = false) => {
+            console[isError ? 'error' : 'log'](message);
+            const p = document.createElement('p');
+            p.textContent = `> ${message}`;
+            p.className = isError ? 'text-red-400' : 'text-green-400';
+            if(diagLog) {
+                diagLog.appendChild(p);
+                diagLog.parentElement.scrollTop = diagLog.parentElement.scrollHeight;
+            }
+        };
 
         // === 로그인 및 인증 처리 ===
         const handleGoogleLogin = () => {
             signInWithPopup(auth, provider)
                 .catch((error) => {
-                    console.error("Google 로그인 실패:", error);
+                    logToScreen(`Google 로그인 실패: ${error.code}`, true);
                     alert("Google 로그인에 실패했습니다. 팝업 차단을 해제했는지, Firebase 설정을 올바르게 했는지 확인해주세요.");
                 });
         };
@@ -276,34 +280,39 @@
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                console.log("✅ 인증 성공:", user.displayName);
+                logToScreen(`인증 성공: ${user.displayName}`);
                 $('#login-screen').classList.add('hidden');
                 $('#app-container').classList.remove('hidden');
                 $('#loading-overlay').classList.remove('hidden');
-                $('#loading-spinner').classList.remove('hidden');
-                $('#loading-text').textContent = '데이터를 불러오는 중...';
                 
+                let percent = 0;
+                const progressBar = $('#progress-bar');
+                const progressPercent = $('#progress-percent');
+                $('#loading-text').textContent = '데이터 동기화 중... ';
+                progressBar.style.width = '0%';
+                progressPercent.textContent = '0';
+
+                loadingInterval = setInterval(() => {
+                    percent += 1;
+                    if (percent < 100) {
+                        progressBar.style.width = percent + '%';
+                        progressPercent.textContent = percent;
+                    } else {
+                        clearInterval(loadingInterval);
+                    }
+                }, 15);
+
                 $('#user-name').textContent = user.displayName;
                 $('#user-photo').src = user.photoURL;
 
                 initializeAndListen();
-
-                clearTimeout(loadingTimeout);
-                loadingTimeout = setTimeout(() => {
-                    if (!$('#loading-overlay').classList.contains('hidden')) {
-                        console.error("⏰ 로딩 타임아웃: Firestore 연결을 확인하세요.");
-                        $('#loading-spinner').classList.add('hidden');
-                        $('#loading-text').innerHTML = '데이터 로딩이 지연되고 있습니다. <br> Firestore 보안 규칙을 확인해주세요.';
-                    }
-                }, 10000);
-
             } else {
-                console.log("👻 로그아웃 상태입니다.");
+                logToScreen("로그아웃 상태 또는 인증 대기 중...");
                 $('#login-screen').classList.remove('hidden');
                 $('#app-container').classList.add('hidden');
                 $('#loading-overlay').classList.add('hidden');
                 if (unsubscribe) unsubscribe();
-                clearTimeout(loadingTimeout);
+                clearInterval(loadingInterval);
             }
         });
         
@@ -311,36 +320,39 @@
         const leagueDocRef = () => doc(db, "leagues", "main");
 
         const initializeAndListen = () => {
-            console.log("👂 Firestore 데이터 수신을 시작합니다...");
+            logToScreen("Firestore 데이터 수신 시작...");
             if (unsubscribe) unsubscribe(); 
 
             unsubscribe = onSnapshot(leagueDocRef(), (docSnap) => {
-                console.log("📦 Firestore 스냅샷 수신!", { exists: docSnap.exists() });
-                clearTimeout(loadingTimeout);
+                logToScreen(`Firestore 스냅샷 수신! (문서 존재: ${docSnap.exists()})`);
+                clearInterval(loadingInterval);
+                $('#progress-bar').style.width = '100%';
+                $('#progress-percent').textContent = '100';
+                $('#loading-text').textContent = '로드 완료!';
+
                 if (docSnap.exists()) {
                     leagueData = docSnap.data();
                 } else {
-                    console.log("📄 문서 없음, 기본 데이터 구조로 초기화합니다.");
+                    logToScreen("문서 없음, 기본 데이터 구조로 초기화합니다.");
                     const initialData = {
                         currentSeason: 1,
-                        seasons: {
-                            "1": { masterPlayerList: {}, groups: {}, gameHistory: [] }
-                        }
+                        seasons: { "1": { masterPlayerList: {}, groups: {}, gameHistory: [] } }
                     };
                     setDoc(leagueDocRef(), initialData).then(() => { 
-                        console.log("✨ 기본 문서 생성 완료!");
+                        logToScreen("기본 문서 생성 완료!");
                         leagueData = initialData; 
                     });
                 }
-                updateUIWithNewData();
-                $('#loading-overlay').classList.add('hidden');
+                
+                setTimeout(() => {
+                    updateUIWithNewData();
+                    $('#loading-overlay').classList.add('hidden');
+                }, 300);
             }, (error) => {
-                clearTimeout(loadingTimeout);
-                console.error("❌ Firestore 데이터 수신 에러:", error);
-                $('#loading-spinner').classList.add('hidden');
+                clearInterval(loadingInterval);
+                logToScreen(`Firestore 데이터 수신 에러: ${error.message}`, true);
                 $('#loading-text').textContent = '데이터 연결에 실패했습니다. Firebase 설정을 확인해주세요.';
             });
-            console.log("✅ Firestore 리스너가 성공적으로 연결되었습니다.");
         };
 
         // === [복원] 뷰 관리, 렌더링, 이벤트 핸들러 등 모든 함수 ===
@@ -1069,9 +1081,6 @@
             $('#mode-double_up').classList.toggle('bg-gray-700', mode !== 'double_up');
             $('#mode-solo').classList.toggle('bg-purple-600', mode === 'solo');
             $('#mode-solo').classList.toggle('bg-gray-700', mode !== 'solo');
-
-            $('#double-up-controls').classList.toggle('hidden', mode !== 'double_up');
-            $('#solo-controls').classList.toggle('hidden', mode !== 'solo');
             
             currentPlayers = [];
             renderPlayerList();
