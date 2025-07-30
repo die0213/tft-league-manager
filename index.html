@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TFT 리그 매니저 (Google Auth Ver.)</title>
+    <title>TFT 리그 매니저 (개인 리그 Ver.)</title>
     <!-- Tailwind CSS 로드 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts (Inter & Noto Sans KR) 로드 -->
@@ -27,7 +27,19 @@
             display: flex; align-items: center; justify-content: center; z-index: 9999;
             flex-direction: column; gap: 1rem;
         }
-        #progress-bar { transition: width 0.1s ease-in-out; }
+        .spinner {
+            width: 56px; height: 56px;
+            border: 6px solid #4B5563;
+            border-bottom-color: #10B981;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
@@ -35,7 +47,7 @@
     <!-- 로그인 화면 -->
     <div id="login-screen">
         <h1 class="text-4xl font-bold text-cyan-400 mb-4">TFT 리그 매니저</h1>
-        <p class="text-gray-400 mb-8">계속하려면 Google 계정으로 로그인하세요.</p>
+        <p class="text-gray-400 mb-8">나만의 리그를 관리하려면 Google 계정으로 로그인하세요.</p>
         <button id="google-login-btn" class="flex items-center gap-3 bg-white text-gray-800 font-semibold py-3 px-6 rounded-lg shadow-lg hover:bg-gray-200 transition-colors">
             <svg class="w-6 h-6" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path><path fill="none" d="M0 0h48v48H0z"></path></svg>
             Google 계정으로 로그인
@@ -44,17 +56,8 @@
 
     <!-- 로딩 오버레이 -->
     <div id="loading-overlay" class="hidden">
-        <div class="w-full max-w-xs">
-            <div class="w-full bg-gray-700 rounded-full h-4 mb-2">
-                <div id="progress-bar" class="bg-gradient-to-r from-cyan-400 to-green-500 h-4 rounded-full" style="width: 0%"></div>
-            </div>
-            <p id="loading-text" class="text-sm text-gray-300 text-center">연결 중... <span id="progress-percent">0</span>%</p>
-        </div>
-        <!-- 진단 로그 표시 영역 -->
-        <div id="diag-log-container" class="mt-4 w-full max-w-xs text-left text-xs bg-gray-900/50 p-2 rounded-md h-32 overflow-y-auto font-mono">
-            <p class="text-gray-400">진단 로그:</p>
-            <div id="diag-log"></div>
-        </div>
+        <div class="spinner"></div>
+        <p id="loading-text" class="text-lg text-gray-300 text-center">데이터를 불러오는 중...</p>
     </div>
 
     <!-- 메인 앱 컨테이너 -->
@@ -184,9 +187,9 @@
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">데이터 관리</h2><p class="text-gray-400 mt-2 mb-6">리그 데이터는 Firebase에 실시간으로 자동 저장됩니다.</p></div>
                 <div class="bg-gray-700/50 p-4 rounded-lg">
                     <h3 class="text-lg font-semibold text-white mb-3">데이터 이전 도우미</h3>
-                    <p class="text-sm text-gray-400 mb-3">기존 로컬 데이터를 Firebase로 옮기려면, 이전 버전 앱의 '내보내기' 기능을 사용해 데이터를 복사한 후 아래에 붙여넣고 '가져오기'를 눌러주세요. **이 작업은 한 번만 하면 됩니다.**</p>
-                    <textarea id="import-data-textarea" class="w-full h-40 bg-gray-900 text-gray-300 text-xs p-2 rounded-md font-mono" placeholder="이전 버전 앱에서 내보낸 데이터를 여기에 붙여넣으세요..."></textarea>
-                    <button id="import-data-btn" class="mt-3 w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Firebase로 데이터 가져오기</button>
+                    <p class="text-sm text-gray-400 mb-3">다른 리그 관리자의 데이터를 가져오려면, 상대방이 내보낸 데이터를 아래에 붙여넣고 '가져오기'를 눌러주세요. **주의: 현재 리그 데이터가 덮어쓰여집니다.**</p>
+                    <textarea id="import-data-textarea" class="w-full h-40 bg-gray-900 text-gray-300 text-xs p-2 rounded-md font-mono" placeholder="가져올 데이터를 여기에 붙여넣으세요..."></textarea>
+                    <button id="import-data-btn" class="mt-3 w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">데이터 가져오기</button>
                 </div>
                  <div class="border-t border-gray-700 mt-8 pt-6">
                     <h3 class="text-lg font-semibold text-white mb-3 text-center">시즌 관리</h3>
@@ -200,10 +203,11 @@
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">패치노트</h2></div>
                 <div class="mt-6 space-y-8 text-gray-300 max-h-[60vh] overflow-y-auto pr-4">
                      <div class="patch-note-item">
-                        <h3 class="text-xl font-bold text-green-400">v13.0 <span class="text-sm font-normal text-gray-400">(2025-07-31)</span></h3>
+                        <h3 class="text-xl font-bold text-green-400">v14.0 <span class="text-sm font-normal text-gray-400">(2025-07-31)</span></h3>
                         <ul class="list-disc list-inside mt-2 space-y-1">
+                            <li><strong class="text-white">개인 리그 시스템 도입</strong>: 이제 각 Google 계정별로 자신만의 독립된 리그 데이터를 생성하고 관리합니다.</li>
+                            <li><strong class="text-white">보안 규칙 강화</strong>: 오직 자기 자신만 자신의 리그 데이터에 접근할 수 있도록 보안 규칙을 업데이트했습니다.</li>
                             <li><strong class="text-white">로그인 방식 변경</strong>: 안정성을 위해 팝업 방식에서 페이지 리디렉션 방식으로 Google 로그인을 변경했습니다.</li>
-                            <li><strong class="text-white">모든 함수 복원</strong>: 누락되었던 모든 JavaScript 함수를 복원하여 앱이 완전하게 작동하도록 수정했습니다.</li>
                         </ul>
                     </div>
                 </div>
@@ -255,6 +259,7 @@
         let currentGameMode = 'double_up';
         let customTeamAssignment = { teams: [], selectedPlayerId: null };
         let unsubscribe; 
+        let currentUser = null;
 
         // === 로그인 및 인증 처리 (리디렉션 방식) ===
         const handleGoogleLogin = () => {
@@ -265,20 +270,14 @@
             signOut(auth);
         };
         
-        // 페이지 로드 시 리디렉션 결과 처리
         getRedirectResult(auth)
-            .then((result) => {
-                if (result) {
-                    console.log("✅ 리디렉션을 통해 인증 성공:", result.user.displayName);
-                }
-            })
             .catch((error) => {
                 console.error("리디렉션 결과 처리 실패:", error);
             });
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                // 사용자가 로그인한 상태
+                currentUser = user;
                 $('#login-screen').classList.add('hidden');
                 $('#app-container').classList.remove('hidden');
                 $('#loading-overlay').classList.remove('hidden');
@@ -288,7 +287,7 @@
 
                 initializeAndListen();
             } else {
-                // 사용자가 로그아웃한 상태
+                currentUser = null;
                 $('#login-screen').classList.remove('hidden');
                 $('#app-container').classList.add('hidden');
                 $('#loading-overlay').classList.add('hidden');
@@ -296,21 +295,32 @@
             }
         });
         
-        // === 데이터 처리 (Firebase 연동) ===
-        const leagueDocRef = () => doc(db, "leagues", "main");
+        // === [변경] 데이터 처리 (개인 리그 구조) ===
+        const leagueDocRef = () => {
+            if (!currentUser) return null;
+            return doc(db, "leagues", currentUser.uid);
+        };
 
         const initializeAndListen = () => {
+            const ref = leagueDocRef();
+            if (!ref) {
+                console.error("사용자 정보가 없어 데이터베이스에 접근할 수 없습니다.");
+                return;
+            }
+
             if (unsubscribe) unsubscribe(); 
 
-            unsubscribe = onSnapshot(leagueDocRef(), (docSnap) => {
+            unsubscribe = onSnapshot(ref, (docSnap) => {
                 if (docSnap.exists()) {
                     leagueData = docSnap.data();
                 } else {
                     const initialData = {
+                        owner: currentUser.displayName,
+                        ownerId: currentUser.uid,
                         currentSeason: 1,
                         seasons: { "1": { masterPlayerList: {}, groups: {}, gameHistory: [] } }
                     };
-                    setDoc(leagueDocRef(), initialData).then(() => { leagueData = initialData; });
+                    setDoc(ref, initialData).then(() => { leagueData = initialData; });
                 }
                 updateUIWithNewData();
                 $('#loading-overlay').classList.add('hidden');
