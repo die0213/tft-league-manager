@@ -200,9 +200,10 @@
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">패치노트</h2></div>
                 <div class="mt-6 space-y-8 text-gray-300 max-h-[60vh] overflow-y-auto pr-4">
                      <div class="patch-note-item">
-                        <h3 class="text-xl font-bold text-green-400">v12.1 <span class="text-sm font-normal text-gray-400">(2025-07-31)</span></h3>
+                        <h3 class="text-xl font-bold text-green-400">v13.0 <span class="text-sm font-normal text-gray-400">(2025-07-31)</span></h3>
                         <ul class="list-disc list-inside mt-2 space-y-1">
-                            <li><strong class="text-white">진단 로그 기능 추가</strong>: 로딩 화면에 상세한 진단 로그를 표시하여 문제 원인을 쉽게 파악할 수 있도록 개선했습니다.</li>
+                            <li><strong class="text-white">로그인 방식 변경</strong>: 안정성을 위해 팝업 방식에서 페이지 리디렉션 방식으로 Google 로그인을 변경했습니다.</li>
+                            <li><strong class="text-white">모든 함수 복원</strong>: 누락되었던 모든 JavaScript 함수를 복원하여 앱이 완전하게 작동하도록 수정했습니다.</li>
                         </ul>
                     </div>
                 </div>
@@ -219,7 +220,7 @@
         // Firebase v9+ SDKs
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
         import { getFirestore, doc, setDoc, updateDoc, deleteField, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
         // =================================================================================
         // === 🚨 중요: 이 부분에 자신의 Firebase 프로젝트 설정 정보를 붙여넣으세요. ===
@@ -228,7 +229,7 @@
             apiKey: "AIzaSyBfAqZLzKtlKREuivOoUs_eM4tDhPqrEHM",
             authDomain: "tft-manager.firebaseapp.com",
             projectId: "tft-manager",
-            storageBucket: "tft-manager.firebasestorage.app",
+            storageBucket: "tft-manager.appspot.com",
             messagingSenderId: "968817010937",
             appId: "1:968817010937:web:87183c67cb6b0e62eeda28"
         };
@@ -243,6 +244,10 @@
         // === 상수 및 전역 변수 ===
         const $ = (selector) => document.querySelector(selector);
         
+        const DEFAULT_RATING = 1000;
+        const SOLO_POINTS = { 8: [30, 20, 10, 5, -5, -10, -20, -30], 6: [25, 15, 5, -5, -15, -25], 4: [20, 5, -5, -20], 2: [10, -10] };
+        const DOUBLE_UP_POINTS = { 1: 25, 2: 10, 3: -10, 4: -25 };
+
         let leagueData = {}; 
         let currentPlayers = [];
         let gameTeams = [];
@@ -250,69 +255,44 @@
         let currentGameMode = 'double_up';
         let customTeamAssignment = { teams: [], selectedPlayerId: null };
         let unsubscribe; 
-        let loadingInterval;
 
-        // === [추가] 진단 로그 함수 ===
-        const diagLog = $('#diag-log');
-        const logToScreen = (message, isError = false) => {
-            console[isError ? 'error' : 'log'](message);
-            const p = document.createElement('p');
-            p.textContent = `> ${message}`;
-            p.className = isError ? 'text-red-400' : 'text-green-400';
-            if(diagLog) {
-                diagLog.appendChild(p);
-                diagLog.parentElement.scrollTop = diagLog.parentElement.scrollHeight;
-            }
-        };
-
-        // === 로그인 및 인증 처리 ===
+        // === 로그인 및 인증 처리 (리디렉션 방식) ===
         const handleGoogleLogin = () => {
-            signInWithPopup(auth, provider)
-                .catch((error) => {
-                    logToScreen(`Google 로그인 실패: ${error.code}`, true);
-                    alert("Google 로그인에 실패했습니다. 팝업 차단을 해제했는지, Firebase 설정을 올바르게 했는지 확인해주세요.");
-                });
+            signInWithRedirect(auth, provider);
         };
 
         const handleLogout = () => {
             signOut(auth);
         };
+        
+        // 페이지 로드 시 리디렉션 결과 처리
+        getRedirectResult(auth)
+            .then((result) => {
+                if (result) {
+                    console.log("✅ 리디렉션을 통해 인증 성공:", result.user.displayName);
+                }
+            })
+            .catch((error) => {
+                console.error("리디렉션 결과 처리 실패:", error);
+            });
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                logToScreen(`인증 성공: ${user.displayName}`);
+                // 사용자가 로그인한 상태
                 $('#login-screen').classList.add('hidden');
                 $('#app-container').classList.remove('hidden');
                 $('#loading-overlay').classList.remove('hidden');
                 
-                let percent = 0;
-                const progressBar = $('#progress-bar');
-                const progressPercent = $('#progress-percent');
-                $('#loading-text').textContent = '데이터 동기화 중... ';
-                progressBar.style.width = '0%';
-                progressPercent.textContent = '0';
-
-                loadingInterval = setInterval(() => {
-                    percent += 1;
-                    if (percent < 100) {
-                        progressBar.style.width = percent + '%';
-                        progressPercent.textContent = percent;
-                    } else {
-                        clearInterval(loadingInterval);
-                    }
-                }, 15);
-
                 $('#user-name').textContent = user.displayName;
                 $('#user-photo').src = user.photoURL;
 
                 initializeAndListen();
             } else {
-                logToScreen("로그아웃 상태 또는 인증 대기 중...");
+                // 사용자가 로그아웃한 상태
                 $('#login-screen').classList.remove('hidden');
                 $('#app-container').classList.add('hidden');
                 $('#loading-overlay').classList.add('hidden');
                 if (unsubscribe) unsubscribe();
-                clearInterval(loadingInterval);
             }
         });
         
@@ -320,42 +300,27 @@
         const leagueDocRef = () => doc(db, "leagues", "main");
 
         const initializeAndListen = () => {
-            logToScreen("Firestore 데이터 수신 시작...");
             if (unsubscribe) unsubscribe(); 
 
             unsubscribe = onSnapshot(leagueDocRef(), (docSnap) => {
-                logToScreen(`Firestore 스냅샷 수신! (문서 존재: ${docSnap.exists()})`);
-                clearInterval(loadingInterval);
-                $('#progress-bar').style.width = '100%';
-                $('#progress-percent').textContent = '100';
-                $('#loading-text').textContent = '로드 완료!';
-
                 if (docSnap.exists()) {
                     leagueData = docSnap.data();
                 } else {
-                    logToScreen("문서 없음, 기본 데이터 구조로 초기화합니다.");
                     const initialData = {
                         currentSeason: 1,
                         seasons: { "1": { masterPlayerList: {}, groups: {}, gameHistory: [] } }
                     };
-                    setDoc(leagueDocRef(), initialData).then(() => { 
-                        logToScreen("기본 문서 생성 완료!");
-                        leagueData = initialData; 
-                    });
+                    setDoc(leagueDocRef(), initialData).then(() => { leagueData = initialData; });
                 }
-                
-                setTimeout(() => {
-                    updateUIWithNewData();
-                    $('#loading-overlay').classList.add('hidden');
-                }, 300);
+                updateUIWithNewData();
+                $('#loading-overlay').classList.add('hidden');
             }, (error) => {
-                clearInterval(loadingInterval);
-                logToScreen(`Firestore 데이터 수신 에러: ${error.message}`, true);
+                console.error("❌ Firestore 데이터 수신 에러:", error);
                 $('#loading-text').textContent = '데이터 연결에 실패했습니다. Firebase 설정을 확인해주세요.';
             });
         };
 
-        // === [복원] 뷰 관리, 렌더링, 이벤트 핸들러 등 모든 함수 ===
+        // === [복원] 모든 함수들 ===
         const views = ['team-generator-view', 'ranking-view', 'result-section', 'record-view', 'custom-team-view', 'player-management-view', 'patch-notes-view', 'data-management-view', 'history-view'];
         const switchView = (targetView) => {
             views.forEach(viewId => {
@@ -613,117 +578,14 @@
                 const button = document.createElement('button');
                 button.textContent = action.label;
                 button.className = action.classes;
-                button.onclick = () => { action.callback(); $('#modal').classList.add('hidden'); };
+                button.onclick = async () => {
+                    await action.callback();
+                    $('#modal').classList.add('hidden');
+                };
                 actionsContainer.appendChild(button);
             });
             $('#modal').classList.remove('hidden');
         };
-
-        async function saveGroupToFirebase(name) {
-            if (!name) return showToast('그룹 이름을 입력해야 합니다.');
-            const groupPath = `seasons.${leagueData.currentSeason}.groups.${name}`;
-            const playerIds = currentPlayers.map(p => p.id);
-            try {
-                await updateDoc(leagueDocRef(), { [groupPath]: playerIds });
-                showToast(`'${name}' 그룹이 저장되었습니다.`);
-            } catch (error) {
-                console.error("그룹 저장 에러:", error);
-                showToast("그룹 저장에 실패했습니다.");
-            }
-        }
-
-        async function deleteGroupFromFirebase(name) {
-            const groupPath = `seasons.${leagueData.currentSeason}.groups.${name}`;
-            try {
-                await updateDoc(leagueDocRef(), { [groupPath]: deleteField() });
-                showToast(`'${name}' 그룹이 삭제되었습니다.`);
-            } catch (error) {
-                console.error("그룹 삭제 에러:", error);
-                showToast("그룹 삭제에 실패했습니다.");
-            }
-        }
-
-        async function mergePlayersInFirebase(primaryId, secondaryIds) {
-            const seasonData = getCurrentSeasonData();
-            const updates = {};
-            
-            Object.keys(seasonData.groups).forEach(groupName => {
-                const group = seasonData.groups[groupName];
-                const needsUpdate = group.some(id => secondaryIds.includes(id));
-                if (needsUpdate) {
-                    const updatedIds = group.map(id => secondaryIds.includes(id) ? primaryId : id);
-                    updates[`seasons.${leagueData.currentSeason}.groups.${groupName}`] = [...new Set(updatedIds)];
-                }
-            });
-
-            secondaryIds.forEach(id => {
-                updates[`seasons.${leagueData.currentSeason}.masterPlayerList.${id}`] = deleteField();
-            });
-
-            try {
-                if (Object.keys(updates).length > 0) {
-                    await updateDoc(leagueDocRef(), updates);
-                }
-                showToast('선수 정보가 통합되었습니다.');
-            } catch(e) {
-                console.error("선수 통합 에러: ", e);
-                showToast("선수 통합에 실패했습니다.");
-            }
-        }
-
-        async function deletePlayerFromFirebase(playerId, playerName) {
-             const playerPath = `seasons.${leagueData.currentSeason}.masterPlayerList.${playerId}`;
-            try {
-                await updateDoc(leagueDocRef(), { [playerPath]: deleteField() });
-                showToast(`${playerName} 선수가 삭제되었습니다.`);
-            } catch(e) {
-                showToast("선수 삭제에 실패했습니다.");
-            }
-        }
-
-        async function startNewSeasonInFirebase() {
-            const lastSeasonData = getCurrentSeasonData();
-            if (!lastSeasonData) return showToast("현재 시즌 데이터가 없어 새 시즌을 시작할 수 없습니다.");
-            
-            const newSeasonNumber = leagueData.currentSeason + 1;
-            
-            const newMasterList = {};
-            Object.values(lastSeasonData.masterPlayerList).forEach(player => {
-                newMasterList[player.id] = { ...player, rating: DEFAULT_RATING };
-            });
-
-            const newSeasonPath = `seasons.${newSeasonNumber}`;
-            const newSeasonData = {
-                masterPlayerList: newMasterList,
-                groups: {},
-                gameHistory: []
-            };
-            
-            try {
-                await updateDoc(leagueDocRef(), {
-                    currentSeason: newSeasonNumber,
-                    [newSeasonPath]: newSeasonData
-                });
-                showToast(`시즌 ${newSeasonNumber}이 시작되었습니다!`);
-                switchView('ranking-view');
-            } catch(e) {
-                showToast("새 시즌 시작에 실패했습니다.");
-            }
-        }
-        
-        async function importDataToFirebase(dataString) {
-            try {
-                const importedData = JSON.parse(dataString);
-                if (importedData.currentSeason && importedData.seasons) {
-                    await setDoc(leagueDocRef(), importedData);
-                    showToast('Firebase에 데이터를 성공적으로 덮어썼습니다!');
-                    $('#import-data-textarea').value = '';
-                } else { throw new Error('Invalid data structure'); }
-            } catch (error) { 
-                console.error("데이터 가져오기 에러:", error);
-                showToast('데이터 형식이 올바르지 않거나 가져오기에 실패했습니다.'); 
-            }
-        }
 
         const handleAddPlayer = async () => {
             const name = $('#player-name').value.trim();
@@ -760,9 +622,19 @@
                 body: '<input type="text" id="group-name-input" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white" placeholder="저장할 그룹 이름 입력">',
                 actions: [
                     { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '저장', classes: 'bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded', callback: () => {
+                    { label: '저장', classes: 'bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
                         const name = $('#group-name-input').value.trim();
-                        saveGroupToFirebase(name);
+                        if (!name) return showToast('그룹 이름을 입력해야 합니다.');
+                        
+                        const groupPath = `seasons.${leagueData.currentSeason}.groups.${name}`;
+                        const playerIds = currentPlayers.map(p => p.id);
+                        try {
+                            await updateDoc(leagueDocRef(), { [groupPath]: playerIds });
+                            showToast(`'${name}' 그룹이 저장되었습니다.`);
+                        } catch (error) {
+                            console.error("그룹 저장 에러:", error);
+                            showToast("그룹 저장에 실패했습니다.");
+                        }
                     }}
                 ]
             });
@@ -788,8 +660,15 @@
                 body: `<p class="text-gray-300">정말로 <strong class="text-cyan-400">${name}</strong> 그룹을 삭제하시겠습니까?</p>`,
                 actions: [
                     { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '삭제', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: () => {
-                        deleteGroupFromFirebase(name);
+                    { label: '삭제', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
+                        const groupPath = `seasons.${leagueData.currentSeason}.groups.${name}`;
+                        try {
+                            await updateDoc(leagueDocRef(), { [groupPath]: deleteField() });
+                            showToast(`'${name}' 그룹이 삭제되었습니다.`);
+                        } catch (error) {
+                            console.error("그룹 삭제 에러:", error);
+                            showToast("그룹 삭제에 실패했습니다.");
+                        }
                     }}
                 ]
             });
@@ -883,10 +762,35 @@
                 body: modalBody,
                 actions: [
                     { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '통합 실행', classes: 'bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded', callback: () => {
+                    { label: '통합 실행', classes: 'bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
                         const primaryId = document.querySelector('input[name="primary-player"]:checked').value;
                         const secondaryIds = selectedIds.filter(id => id !== primaryId);
-                        mergePlayersInFirebase(primaryId, secondaryIds);
+                        
+                        const seasonData = getCurrentSeasonData();
+                        const updates = {};
+                        
+                        Object.keys(seasonData.groups).forEach(groupName => {
+                            const group = seasonData.groups[groupName];
+                            const needsUpdate = group.some(id => secondaryIds.includes(id));
+                            if (needsUpdate) {
+                                const updatedIds = group.map(id => secondaryIds.includes(id) ? primaryId : id);
+                                updates[`seasons.${leagueData.currentSeason}.groups.${groupName}`] = [...new Set(updatedIds)];
+                            }
+                        });
+
+                        secondaryIds.forEach(id => {
+                            updates[`seasons.${leagueData.currentSeason}.masterPlayerList.${id}`] = deleteField();
+                        });
+
+                        try {
+                            if (Object.keys(updates).length > 0) {
+                                await updateDoc(leagueDocRef(), updates);
+                            }
+                            showToast('선수 정보가 통합되었습니다.');
+                        } catch(e) {
+                            console.error("선수 통합 에러: ", e);
+                            showToast("선수 통합에 실패했습니다.");
+                        }
                     }}
                 ]
             });
@@ -1023,8 +927,18 @@
                 body: '<p class="text-gray-300">정말로 이 데이터로 Firebase를 덮어쓰시겠습니까? 이 작업은 되돌릴 수 없습니다.</p>',
                 actions: [
                     { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '덮어쓰기', classes: 'bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded', callback: () => {
-                        importDataToFirebase(dataString);
+                    { label: '덮어쓰기', classes: 'bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
+                        try {
+                            const importedData = JSON.parse(dataString);
+                            if (importedData.currentSeason && importedData.seasons) {
+                                await setDoc(leagueDocRef(), importedData);
+                                showToast('Firebase에 데이터를 성공적으로 덮어썼습니다!');
+                                $('#import-data-textarea').value = '';
+                            } else { throw new Error('Invalid data structure'); }
+                        } catch (error) { 
+                            console.error("데이터 가져오기 에러:", error);
+                            showToast('데이터 형식이 올바르지 않거나 가져오기에 실패했습니다.'); 
+                        }
                     }}
                 ]
             });
@@ -1055,8 +969,14 @@
                 body: `<p class="text-gray-300">정말로 <strong class="text-cyan-400">${playerToDelete.name}</strong> 선수를 영구적으로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</p>`,
                 actions: [
                     { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '삭제', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: () => {
-                        deletePlayerFromFirebase(playerId, playerToDelete.name);
+                    { label: '삭제', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
+                        const playerPath = `seasons.${leagueData.currentSeason}.masterPlayerList.${playerId}`;
+                        try {
+                            await updateDoc(leagueDocRef(), { [playerPath]: deleteField() });
+                            showToast(`${playerToDelete.name} 선수가 삭제되었습니다.`);
+                        } catch(e) {
+                            showToast("선수 삭제에 실패했습니다.");
+                        }
                     }}
                 ]
             });
@@ -1068,8 +988,34 @@
                 body: `<p class="text-gray-300">정말로 새 시즌을 시작하시겠습니까? 모든 플레이어의 점수가 ${DEFAULT_RATING}점으로 초기화됩니다. 이전 시즌 기록은 보존됩니다.</p>`,
                 actions: [
                     { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '새 시즌 시작', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: () => {
-                        startNewSeasonInFirebase();
+                    { label: '새 시즌 시작', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
+                        const lastSeasonData = getCurrentSeasonData();
+                        if (!lastSeasonData) return showToast("현재 시즌 데이터가 없어 새 시즌을 시작할 수 없습니다.");
+                        
+                        const newSeasonNumber = leagueData.currentSeason + 1;
+                        
+                        const newMasterList = {};
+                        Object.values(lastSeasonData.masterPlayerList).forEach(player => {
+                            newMasterList[player.id] = { ...player, rating: DEFAULT_RATING };
+                        });
+
+                        const newSeasonPath = `seasons.${newSeasonNumber}`;
+                        const newSeasonData = {
+                            masterPlayerList: newMasterList,
+                            groups: {},
+                            gameHistory: []
+                        };
+                        
+                        try {
+                            await updateDoc(leagueDocRef(), {
+                                currentSeason: newSeasonNumber,
+                                [newSeasonPath]: newSeasonData
+                            });
+                            showToast(`시즌 ${newSeasonNumber}이 시작되었습니다!`);
+                            switchView('ranking-view');
+                        } catch(e) {
+                            showToast("새 시즌 시작에 실패했습니다.");
+                        }
                     }}
                 ]
             });
