@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TFT 리그 매니저 (개인 리그 Ver.)</title>
+    <title>TFT 리그 매니저 v16.3</title>
     <!-- Tailwind CSS 로드 -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js 로드 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Google Fonts (Inter & Noto Sans KR) 로드 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,133 +22,113 @@
         }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 10; }
         .modal-content { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 20; }
-        .player-selected { box-shadow: 0 0 0 3px #34D399; }
-        #loading-overlay, #login-screen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(17, 24, 39, 0.9);
-            display: flex; align-items: center; justify-content: center; z-index: 9999;
-            flex-direction: column; gap: 1rem;
-        }
-        .spinner {
-            width: 56px; height: 56px;
-            border: 6px solid #4B5563;
-            border-bottom-color: #10B981;
-            border-radius: 50%;
-            display: inline-block;
-            box-sizing: border-box;
-            animation: rotation 1s linear infinite;
-        }
-        @keyframes rotation {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        /* 드래그 앤 드롭 스타일 */
+        .player-card { cursor: grab; }
+        .player-card.dragging { opacity: 0.5; border: 2px dashed #34D399; cursor: grabbing; }
+        .drop-zone.drag-over { background-color: rgba(52, 211, 153, 0.2); border-color: #A7F3D0; }
+        .trophy-icon { font-size: 2.5rem; }
     </style>
 </head>
-<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
+<body class="bg-gray-900 text-gray-100 flex items-center justify-center min-h-screen p-4">
 
-    <!-- 로그인 화면 -->
-    <div id="login-screen">
-        <h1 class="text-4xl font-bold text-cyan-400 mb-4">TFT 리그 매니저</h1>
-        <p class="text-gray-400 mb-8">나만의 리그를 관리하려면 Google 계정으로 로그인하세요.</p>
-        <button id="google-login-btn" class="flex items-center gap-3 bg-white text-gray-800 font-semibold py-3 px-6 rounded-lg shadow-lg hover:bg-gray-200 transition-colors">
-            <svg class="w-6 h-6" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path><path fill="none" d="M0 0h48v48H0z"></path></svg>
-            Google 계정으로 로그인
-        </button>
-    </div>
-
-    <!-- 로딩 오버레이 -->
-    <div id="loading-overlay" class="hidden">
-        <div class="spinner"></div>
-        <p id="loading-text" class="text-lg text-gray-300 text-center">데이터를 불러오는 중...</p>
-    </div>
-
-    <!-- 메인 앱 컨테이너 -->
-    <div id="app-container" class="hidden w-full max-w-4xl mx-auto bg-gray-800 rounded-2xl shadow-2xl p-6 md:p-8 border border-gray-700">
+    <div class="w-full max-w-6xl mx-auto bg-gray-800 rounded-2xl shadow-2xl p-6 md:p-8 border border-gray-700">
         
         <!-- 헤더 및 뷰 전환 버튼 -->
-        <div class="mb-6">
-            <div class="flex justify-between items-center text-center mb-4">
-                <div></div> <!-- 왼쪽 공간 확보용 빈 div -->
-                <div>
-                    <h1 class="text-3xl font-bold text-cyan-400">TFT 리그 매니저</h1>
-                    <p id="season-display" class="text-gray-400 mt-1">시즌 ?</p>
-                </div>
-                <div id="user-profile" class="flex items-center gap-3 text-right">
-                     <span id="user-name" class="text-sm text-gray-300 hidden sm:inline"></span>
-                     <img id="user-photo" class="w-8 h-8 rounded-full" src="" alt="User photo">
-                     <button id="logout-btn" class="text-sm bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-md">로그아웃</button>
-                </div>
-            </div>
-            <div class="mt-4 inline-flex flex-wrap justify-center rounded-md shadow-sm w-full">
-                <button data-view="team-generator-view" class="view-btn px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-gray-600 rounded-l-lg hover:bg-indigo-700">팀/게임 생성</button>
-                <button data-view="ranking-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-gray-600 hover:bg-gray-600">랭킹 보기</button>
-                <button data-view="history-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-gray-600 hover:bg-gray-600">전적 보기</button>
-                <button data-view="player-management-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-gray-600 hover:bg-gray-600">선수 관리</button>
-                <button data-view="data-management-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-gray-600 hover:bg-gray-600">데이터 관리</button>
+        <div class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-cyan-400">TFT 리그 매니저</h1>
+            <p id="season-display" class="text-gray-400 mt-1">시즌 1</p>
+            <div class="mt-4 inline-flex flex-wrap justify-center rounded-md shadow-sm">
+                <button data-view="dashboard-view" class="view-btn px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-gray-600 rounded-l-lg hover:bg-indigo-700">대시보드</button>
+                <button data-view="player-registration-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-gray-600 hover:bg-gray-600">선수 관리</button>
+                <button data-view="game-creation-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-gray-600 hover:bg-gray-600">게임 생성</button>
+                <button data-view="ranking-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-gray-600 hover:bg-gray-600">랭킹</button>
+                <button data-view="hall-of-fame-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-gray-600 hover:bg-gray-600">명예의 전당</button>
+                <button data-view="history-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-gray-600 hover:bg-gray-600">전적</button>
+                <button data-view="compare-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-gray-600 hover:bg-gray-600">상대 전적</button>
+                <button data-view="data-management-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-r border-gray-600 hover:bg-gray-600">데이터 관리</button>
                 <button data-view="patch-notes-view" class="view-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-r border-gray-600 hover:bg-gray-600">패치노트</button>
             </div>
         </div>
 
         <!-- 뷰 컨테이너 -->
         <div id="views-container">
-            <!-- 팀/게임 생성기 뷰 -->
-            <div id="team-generator-view" class="fade-in">
+            <!-- 대시보드 뷰 -->
+            <div id="dashboard-view" class="fade-in">
+                <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">리그 대시보드</h2><p class="text-gray-400 mt-2 mb-6">우리 리그의 현황을 한눈에 확인하세요.</p></div>
+                <div id="dashboard-content" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+            </div>
+
+            <!-- 상대 전적 비교 뷰 -->
+            <div id="compare-view" class="hidden fade-in">
+                <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">상대 전적 비교</h2><p class="text-gray-400 mt-2 mb-6">두 명의 선수를 선택하여 전적을 비교해보세요.</p></div>
+                <div class="flex justify-center items-center gap-4 mb-6">
+                    <select id="compare-player1" class="bg-gray-700 border border-gray-600 rounded-md px-3 py-2"></select>
+                    <span class="font-bold text-xl text-cyan-400">VS</span>
+                    <select id="compare-player2" class="bg-gray-700 border border-gray-600 rounded-md px-3 py-2"></select>
+                </div>
+                <div id="compare-result" class="bg-gray-900/50 p-6 rounded-lg min-h-[200px]"></div>
+            </div>
+            
+            <!-- 선수 등록 뷰 -->
+            <div id="player-registration-view" class="hidden fade-in">
+                <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">선수 등록 및 관리</h2><p class="text-gray-400 mt-2 mb-6">리그에 참여할 선수를 등록하거나, 기존 선수의 점수를 관리합니다.</p></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3">새 선수 등록</h3>
+                        <div class="bg-gray-700 p-4 rounded-lg flex items-center gap-4">
+                            <input type="text" id="player-name-input" class="flex-grow bg-gray-900 border border-gray-600 rounded-md px-3 py-2 placeholder-gray-500 focus:ring-2 focus:ring-cyan-400" placeholder="플레이어 이름">
+                            <button id="add-player-btn" class="w-auto bg-cyan-500 text-gray-900 font-bold py-2 px-4 rounded-md hover:bg-cyan-400">등록</button>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-3">등록된 선수 목록</h3>
+                        <div id="master-player-list-container" class="space-y-3 max-h-[50vh] overflow-y-auto pr-2 bg-gray-900/50 p-3 rounded-lg"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 게임 생성 뷰 -->
+            <div id="game-creation-view" class="hidden fade-in">
+                <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">게임 생성</h2><p class="text-gray-400 mt-2 mb-6">이번 게임에 참여할 선수를 선택하고, 게임 모드를 골라주세요.</p></div>
                 <div class="flex justify-center mb-6">
                     <div class="inline-flex rounded-md shadow-sm">
                         <button id="mode-double_up" class="mode-btn px-4 py-2 text-sm font-medium text-white bg-purple-600 border border-gray-600 rounded-l-lg hover:bg-purple-700">더블업</button>
                         <button id="mode-solo" class="mode-btn px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border-t border-b border-r border-gray-600 hover:bg-gray-600">개인전</button>
                     </div>
                 </div>
-                <div id="saved-group-section" class="bg-gray-900/50 p-4 rounded-lg mb-6 border border-gray-700">
-                    <h3 class="text-lg font-semibold text-white mb-3">저장된 그룹</h3>
-                    <div class="flex flex-col sm:flex-row gap-3">
-                        <select id="saved-groups-dropdown" class="flex-grow bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"><option value="">-- 그룹 선택 --</option></select>
-                        <div class="flex gap-3">
-                            <button id="load-group-btn" class="w-full sm:w-auto bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-500 disabled:bg-gray-600" disabled>불러오기</button>
-                            <button id="delete-group-btn" class="w-full sm:w-auto bg-red-600 text-white font-bold py-2 px-4 rounded-md hover:bg-red-500 disabled:bg-gray-600" disabled>삭제</button>
-                        </div>
-                    </div>
-                </div>
-                <div id="input-section">
-                    <div class="bg-gray-700 p-4 rounded-lg mb-4 flex items-center gap-4">
-                        <input type="text" id="player-name" class="flex-grow bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white placeholder-gray-500 focus:ring-2 focus:ring-cyan-500" placeholder="플레이어 이름">
-                        <button id="add-player-btn" class="w-auto bg-cyan-500 text-gray-900 font-bold py-2 px-4 rounded-md hover:bg-cyan-400">추가</button>
-                    </div>
-                    <div id="player-list" class="space-y-2 mb-6 min-h-[50px]"></div>
-                    <div id="double-up-controls" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <button id="save-group-btn" class="w-full bg-teal-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-teal-700 disabled:bg-gray-600" disabled>멤버 저장</button>
-                        <button id="generate-balanced-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-600">밸런스 팀</button>
-                        <button id="generate-random-btn" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-gray-600">랜덤 팀</button>
-                        <button id="generate-custom-btn" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 disabled:bg-gray-600">커스텀 팀</button>
+                <h3 class="text-lg font-semibold mb-3 text-center">참가 선수 선택</h3>
+                <div id="game-player-selection-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 p-4 bg-gray-900/50 rounded-lg max-h-[40vh] overflow-y-auto"></div>
+                <div id="game-creation-error" class="mt-4 text-center text-red-400 font-semibold h-6"></div>
+                <div class="border-t border-gray-700 mt-6 pt-6">
+                    <div id="double-up-controls" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <button id="generate-balanced-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 disabled:bg-gray-600" disabled>밸런스 팀 생성</button>
+                        <button id="generate-random-btn" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 disabled:bg-gray-600" disabled>랜덤 팀 생성</button>
+                        <button id="generate-custom-btn" class="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-purple-700 disabled:bg-gray-600" disabled>커스텀 팀 생성</button>
                     </div>
                     <div id="solo-controls" class="hidden text-center">
-                        <button id="start-solo-game-btn" class="bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 disabled:bg-gray-600" disabled>게임 시작</button>
+                        <button id="start-solo-game-btn" class="bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 disabled:bg-gray-600" disabled>개인전 시작</button>
                     </div>
                 </div>
-                <div id="error-message" class="mt-4 text-center text-red-400 font-semibold h-6"></div>
             </div>
             
-            <!-- 전적 보기 뷰 -->
-            <div id="history-view" class="hidden fade-in">
-                <div class="text-center mb-6"><h2 class="text-2xl font-bold text-center text-cyan-400">게임 기록</h2>
-                <select id="history-season-selector" class="mt-2 bg-gray-700 border border-gray-600 rounded-md px-3 py-1 text-white"></select>
-                </div>
-                <div id="game-history-list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2"></div>
+            <!-- 명예의 전당 뷰 -->
+            <div id="hall-of-fame-view" class="hidden fade-in">
+                <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">명예의 전당</h2><p class="text-gray-400 mt-2 mb-6">이번 시즌을 빛낸 최고의 플레이어들입니다.</p></div>
+                <div id="hall-of-fame-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
             </div>
 
-            <!-- 선수 관리 뷰 -->
-            <div id="player-management-view" class="hidden fade-in">
-                <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">선수 관리</h2><p class="text-gray-400 mt-2 mb-6">선수 점수를 조정하거나, 통합/삭제할 수 있습니다.</p></div>
-                <div id="master-player-list-container" class="space-y-3 max-h-[50vh] overflow-y-auto pr-2"></div>
-                <div class="text-center mt-6 border-t border-gray-700 pt-6"><button id="merge-players-btn" class="bg-green-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-green-700 disabled:bg-gray-600" disabled>선택한 선수 통합</button></div>
-            </div>
-
-            <!-- 커스텀 팀 생성 뷰 -->
+            <!-- 커스텀 팀 생성 뷰 (드래그 앤 드롭) -->
             <div id="custom-team-view" class="hidden fade-in">
-                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">커스텀 팀 만들기</h2><p class="text-gray-400 mt-2 mb-6">플레이어를 클릭하여 팀에 배정하세요.</p></div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div><h3 class="text-lg font-semibold text-white mb-3 text-center">참가자 목록</h3><div id="custom-available-players" class="space-y-2 bg-gray-900/50 p-3 rounded-lg min-h-[100px]"></div></div>
-                    <div><h3 class="text-lg font-semibold text-white mb-3 text-center">팀 구성</h3><div id="custom-team-slots" class="space-y-3"></div></div>
+                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">커스텀 팀 만들기</h2><p class="text-gray-400 mt-2 mb-6">선수 카드를 드래그하여 팀 슬롯에 배정하세요.</p></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1">
+                        <h3 class="text-lg font-semibold mb-3 text-center">참가자 목록</h3>
+                        <div id="custom-available-players" class="space-y-2 bg-gray-900/50 p-3 rounded-lg min-h-[200px] drop-zone"></div>
+                    </div>
+                    <div class="lg:col-span-2">
+                        <h3 class="text-lg font-semibold mb-3 text-center">팀 구성</h3>
+                        <div id="custom-team-slots" class="grid grid-cols-2 gap-4"></div>
+                    </div>
                 </div>
                 <div class="text-center mt-8 flex justify-center gap-4">
                     <button id="cancel-custom-btn" class="bg-gray-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-gray-500">취소</button>
@@ -156,7 +138,7 @@
 
             <!-- 랭킹 뷰 -->
             <div id="ranking-view" class="hidden fade-in">
-                <div class="bg-gray-700/50 rounded-lg p-4">
+                <div class="bg-gray-700 rounded-lg p-4">
                     <table class="w-full text-left">
                         <thead class="border-b border-gray-600"><tr><th class="p-3 text-sm font-semibold text-cyan-400">순위</th><th class="p-3 text-sm font-semibold text-cyan-400">이름</th><th class="p-3 text-sm font-semibold text-cyan-400">레이팅</th></tr></thead>
                         <tbody id="ranking-list"></tbody>
@@ -164,6 +146,22 @@
                 </div>
             </div>
             
+            <!-- 전적 보기 뷰 -->
+            <div id="history-view" class="hidden fade-in">
+                <div class="text-center mb-6"><h2 class="text-2xl font-bold text-center text-cyan-400">게임 기록</h2>
+                <div class="flex justify-center gap-4 mt-4">
+                    <select id="history-season-selector" class="bg-gray-700 border border-gray-600 rounded-md px-3 py-1"></select>
+                    <select id="history-player-filter" class="bg-gray-700 border border-gray-600 rounded-md px-3 py-1"></select>
+                    <select id="history-mode-filter" class="bg-gray-700 border border-gray-600 rounded-md px-3 py-1">
+                        <option value="all">모든 모드</option>
+                        <option value="double_up">더블업</option>
+                        <option value="solo">개인전</option>
+                    </select>
+                </div>
+                </div>
+                <div id="game-history-list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2"></div>
+            </div>
+
             <!-- 결과 뷰 -->
             <div id="result-section" class="hidden fade-in">
                 <div class="text-center"><h2 class="text-3xl font-bold text-center text-cyan-400">팀 배정 결과</h2><p class="text-gray-400 mt-2 mb-8">행운을 빌어요!</p></div>
@@ -177,24 +175,34 @@
             <!-- 전적 기록 뷰 -->
             <div id="record-view" class="hidden fade-in">
                 <div class="text-center"><h2 class="text-3xl font-bold text-center text-cyan-400">게임 결과 기록</h2><p class="text-gray-400 mt-2 mb-8">각 팀/플레이어의 최종 등수를 입력하세요.</p></div>
-                <div id="record-list" class="space-y-3 max-w-lg mx-auto"></div>
+                <div id="record-list" class="space-y-4 max-w-lg mx-auto"></div>
                 <div id="record-error-message" class="mt-4 text-center text-red-400 font-semibold h-6"></div>
                 <div class="text-center mt-8"><button id="save-record-btn" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-indigo-700">저장 및 랭킹 업데이트</button></div>
             </div>
-
+            
             <!-- 데이터 관리 뷰 -->
             <div id="data-management-view" class="hidden fade-in">
-                <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">데이터 관리</h2><p class="text-gray-400 mt-2 mb-6">리그 데이터는 Firebase에 실시간으로 자동 저장됩니다.</p></div>
-                <div class="bg-gray-700/50 p-4 rounded-lg">
-                    <h3 class="text-lg font-semibold text-white mb-3">데이터 이전 도우미</h3>
-                    <p class="text-sm text-gray-400 mb-3">다른 리그 관리자의 데이터를 가져오려면, 상대방이 내보낸 데이터를 아래에 붙여넣고 '가져오기'를 눌러주세요. **주의: 현재 리그 데이터가 덮어쓰여집니다.**</p>
-                    <textarea id="import-data-textarea" class="w-full h-40 bg-gray-900 text-gray-300 text-xs p-2 rounded-md font-mono" placeholder="가져올 데이터를 여기에 붙여넣으세요..."></textarea>
-                    <button id="import-data-btn" class="mt-3 w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">데이터 가져오기</button>
+                <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">데이터 관리</h2><p class="text-gray-400 mt-2 mb-6">리그 데이터를 백업하거나 다른 기기로 옮길 수 있습니다.</p></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="bg-gray-700 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-3">데이터 내보내기</h3>
+                        <p class="text-sm text-gray-400 mb-3">아래 텍스트를 복사하여 안전한 곳에 보관하세요.</p>
+                        <textarea id="export-data-textarea" class="w-full h-40 bg-gray-900 text-gray-300 text-xs p-2 rounded-md font-mono" readonly></textarea>
+                        <button id="export-data-btn" class="mt-3 w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700">내보내기 데이터 생성</button>
+                    </div>
+                    <div class="bg-gray-700 p-4 rounded-lg">
+                        <h3 class="text-lg font-semibold mb-3">데이터 가져오기</h3>
+                        <p class="text-sm text-gray-400 mb-3">백업한 데이터를 아래에 붙여넣으세요.</p>
+                        <textarea id="import-data-textarea" class="w-full h-40 bg-gray-900 text-gray-300 text-xs p-2 rounded-md font-mono" placeholder="여기에 데이터를 붙여넣으세요..."></textarea>
+                        <button id="import-data-btn" class="mt-3 w-full bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">데이터 가져오기</button>
+                    </div>
                 </div>
-                 <div class="border-t border-gray-700 mt-8 pt-6">
-                    <h3 class="text-lg font-semibold text-white mb-3 text-center">시즌 관리</h3>
-                    <p class="text-sm text-gray-400 mb-3 text-center">현재 시즌을 종료하고 모든 플레이어의 점수를 초기화합니다.</p>
-                    <button id="start-new-season-btn" class="w-full max-w-xs mx-auto block bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700">새 시즌 시작</button>
+                <div class="border-t border-gray-700 mt-8 pt-6">
+                    <h3 class="text-lg font-semibold mb-3 text-center">시즌 관리</h3>
+                    <div class="flex flex-col items-center gap-4">
+                        <button id="undo-last-game-btn" class="w-full max-w-xs mx-auto block bg-yellow-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-yellow-700">마지막 게임 되돌리기</button>
+                        <button id="start-new-season-btn" class="w-full max-w-xs mx-auto block bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700">새 시즌 시작</button>
+                    </div>
                 </div>
             </div>
 
@@ -203,11 +211,12 @@
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">패치노트</h2></div>
                 <div class="mt-6 space-y-8 text-gray-300 max-h-[60vh] overflow-y-auto pr-4">
                      <div class="patch-note-item">
-                        <h3 class="text-xl font-bold text-green-400">v14.0 <span class="text-sm font-normal text-gray-400">(2025-07-31)</span></h3>
+                        <h3 class="text-xl font-bold text-green-400">v16.2 <span class="text-sm font-normal text-gray-400">(2025-07-31)</span></h3>
                         <ul class="list-disc list-inside mt-2 space-y-1">
-                            <li><strong class="text-white">개인 리그 시스템 도입</strong>: 이제 각 Google 계정별로 자신만의 독립된 리그 데이터를 생성하고 관리합니다.</li>
-                            <li><strong class="text-white">보안 규칙 강화</strong>: 오직 자기 자신만 자신의 리그 데이터에 접근할 수 있도록 보안 규칙을 업데이트했습니다.</li>
-                            <li><strong class="text-white">로그인 방식 변경</strong>: 안정성을 위해 팝업 방식에서 페이지 리디렉션 방식으로 Google 로그인을 변경했습니다.</li>
+                            <li><strong class="text-white">편의성 개선</strong>: '게임 생성' 탭의 참가자 선택이 유지되도록 변경했습니다.</li>
+                            <li><strong class="text-white">UI 간소화</strong>: '게임 결과 기록' 화면에서 덱 입력창을 제거했습니다.</li>
+                            <li><strong class="text-white">기능 정리</strong>: 테마 기능과 추천 덱 탭을 제거하여 핵심 기능에 집중하도록 했습니다.</li>
+                            <li><strong class="text-white">오류 수정</strong>: 드래그 앤 드롭 기능 및 기타 자잘한 오류들을 수정했습니다.</li>
                         </ul>
                     </div>
                 </div>
@@ -216,122 +225,30 @@
     </div>
 
     <!-- 모달 및 토스트 -->
-    <div id="modal" class="modal-overlay hidden fade-in"><div class="modal-content bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm border border-gray-700"><h3 id="modal-title" class="text-xl font-bold text-white mb-4"></h3><div id="modal-body"></div><div id="modal-actions" class="mt-6 flex justify-end gap-3"></div></div></div>
+    <div id="modal" class="modal-overlay hidden fade-in"><div class="modal-content bg-gray-700 rounded-lg shadow-xl p-6 w-full max-w-lg border border-gray-600"><h3 id="modal-title" class="text-xl font-bold text-cyan-400 mb-4"></h3><div id="modal-body"></div><div id="modal-actions" class="mt-6 flex justify-end gap-3"></div></div></div>
     <div id="toast" class="hidden fixed bottom-10 right-10 bg-green-500 text-white py-2 px-5 rounded-lg shadow-lg fade-in"></div>
 
-    <!-- Firebase SDK 로드 -->
-    <script type="module">
-        // Firebase v9+ SDKs
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getFirestore, doc, setDoc, updateDoc, deleteField, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
-        // =================================================================================
-        // === 🚨 중요: 이 부분에 자신의 Firebase 프로젝트 설정 정보를 붙여넣으세요. ===
-        // =================================================================================
-        const firebaseConfig = {
-            apiKey: "AIzaSyBfAqZLzKtlKREuivOoUs_eM4tDhPqrEHM",
-            authDomain: "tft-manager.firebaseapp.com",
-            projectId: "tft-manager",
-            storageBucket: "tft-manager.appspot.com",
-            messagingSenderId: "968817010937",
-            appId: "1:968817010937:web:87183c67cb6b0e62eeda28"
-        };
-        // =================================================================================
-
-        // Firebase 앱 초기화
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        const provider = new GoogleAuthProvider();
-
-        // === 상수 및 전역 변수 ===
+    <script>
+        // === 상수 및 변수 ===
         const $ = (selector) => document.querySelector(selector);
+        const $$ = (selector) => document.querySelectorAll(selector);
         
+        const LEAGUE_DATA_KEY = 'tftLeagueData_v16';
         const DEFAULT_RATING = 1000;
         const SOLO_POINTS = { 8: [30, 20, 10, 5, -5, -10, -20, -30], 6: [25, 15, 5, -5, -15, -25], 4: [20, 5, -5, -20], 2: [10, -10] };
         const DOUBLE_UP_POINTS = { 1: 25, 2: 10, 3: -10, 4: -25 };
 
-        let leagueData = {}; 
-        let currentPlayers = [];
+        let leagueData = {};
+        let gameParticipants = [];
         let gameTeams = [];
         let gamePlayers = [];
         let currentGameMode = 'double_up';
-        let customTeamAssignment = { teams: [], selectedPlayerId: null };
-        let unsubscribe; 
-        let currentUser = null;
-
-        // === 로그인 및 인증 처리 (리디렉션 방식) ===
-        const handleGoogleLogin = () => {
-            signInWithRedirect(auth, provider);
-        };
-
-        const handleLogout = () => {
-            signOut(auth);
-        };
-        
-        getRedirectResult(auth)
-            .catch((error) => {
-                console.error("리디렉션 결과 처리 실패:", error);
-            });
-
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                $('#login-screen').classList.add('hidden');
-                $('#app-container').classList.remove('hidden');
-                $('#loading-overlay').classList.remove('hidden');
-                
-                $('#user-name').textContent = user.displayName;
-                $('#user-photo').src = user.photoURL;
-
-                initializeAndListen();
-            } else {
-                currentUser = null;
-                $('#login-screen').classList.remove('hidden');
-                $('#app-container').classList.add('hidden');
-                $('#loading-overlay').classList.add('hidden');
-                if (unsubscribe) unsubscribe();
-            }
-        });
-        
-        // === [변경] 데이터 처리 (개인 리그 구조) ===
-        const leagueDocRef = () => {
-            if (!currentUser) return null;
-            return doc(db, "leagues", currentUser.uid);
-        };
-
-        const initializeAndListen = () => {
-            const ref = leagueDocRef();
-            if (!ref) {
-                console.error("사용자 정보가 없어 데이터베이스에 접근할 수 없습니다.");
-                return;
-            }
-
-            if (unsubscribe) unsubscribe(); 
-
-            unsubscribe = onSnapshot(ref, (docSnap) => {
-                if (docSnap.exists()) {
-                    leagueData = docSnap.data();
-                } else {
-                    const initialData = {
-                        owner: currentUser.displayName,
-                        ownerId: currentUser.uid,
-                        currentSeason: 1,
-                        seasons: { "1": { masterPlayerList: {}, groups: {}, gameHistory: [] } }
-                    };
-                    setDoc(ref, initialData).then(() => { leagueData = initialData; });
-                }
-                updateUIWithNewData();
-                $('#loading-overlay').classList.add('hidden');
-            }, (error) => {
-                console.error("❌ Firestore 데이터 수신 에러:", error);
-                $('#loading-text').textContent = '데이터 연결에 실패했습니다. Firebase 설정을 확인해주세요.';
-            });
-        };
+        let customTeamAssignment = { teams: [] };
+        let draggedPlayerId = null;
+        let ratingChart = null;
 
         // === [복원] 모든 함수들 ===
-        const views = ['team-generator-view', 'ranking-view', 'result-section', 'record-view', 'custom-team-view', 'player-management-view', 'patch-notes-view', 'data-management-view', 'history-view'];
+        const views = ['dashboard-view', 'player-registration-view', 'game-creation-view', 'ranking-view', 'result-section', 'record-view', 'custom-team-view', 'hall-of-fame-view', 'patch-notes-view', 'data-management-view', 'history-view', 'compare-view'];
         const switchView = (targetView) => {
             views.forEach(viewId => {
                 const viewElement = $(`#${viewId}`);
@@ -339,105 +256,87 @@
             });
             $(`#${targetView}`).classList.remove('hidden');
 
-            document.querySelectorAll('.view-btn').forEach(btn => {
-                const isTarget = btn.dataset.view === targetView || (targetView.includes('team-generator') && btn.dataset.view === 'team-generator-view') || (targetView.includes('custom-team') && btn.dataset.view === 'team-generator-view');
+            $$('.view-btn').forEach(btn => {
+                const isTarget = btn.dataset.view === targetView;
                 btn.classList.toggle('bg-indigo-600', isTarget);
                 btn.classList.toggle('text-white', isTarget);
                 btn.classList.toggle('bg-gray-700', !isTarget);
                 btn.classList.toggle('text-gray-300', !isTarget);
             });
             
+            if (targetView === 'dashboard-view') renderDashboard();
+            if (targetView === 'player-registration-view') renderPlayerManagementView();
+            if (targetView === 'game-creation-view') renderGameCreationView();
             if (targetView === 'ranking-view') renderRankingList();
-            if (targetView === 'player-management-view') renderPlayerManagementView();
+            if (targetView === 'hall-of-fame-view') renderHallOfFame();
             if (targetView === 'history-view') renderGameHistory();
-        };
-
-        const updateUIWithNewData = () => {
-            if (!leagueData || !leagueData.seasons || !leagueData.currentSeason) {
-                return;
-            }
-            $('#season-display').textContent = `시즌 ${leagueData.currentSeason}`;
-            renderSavedGroups();
-            
-            const activeView = views.find(v => document.getElementById(v) && !document.getElementById(v).classList.contains('hidden'));
-            
-            if (!activeView) {
-                switchView('team-generator-view');
-                return;
-            }
-
-            switch(activeView) {
-                case 'ranking-view':
-                    renderRankingList();
-                    break;
-                case 'player-management-view':
-                    renderPlayerManagementView();
-                    break;
-                case 'history-view':
-                    renderGameHistory(leagueData.currentSeason);
-                    break;
-            }
-        };
-
-        const getCurrentSeasonData = () => leagueData.seasons ? leagueData.seasons[leagueData.currentSeason] : null;
-
-        const renderPlayerList = () => {
-            $('#player-list').innerHTML = '';
-            currentPlayers.forEach(player => {
-                const playerCard = document.createElement('div');
-                playerCard.className = 'fade-in flex items-center justify-between bg-gray-700 p-3 rounded-md';
-                playerCard.innerHTML = `<span class="font-bold text-white">${player.name} (${player.rating})</span><button data-id="${player.id}" class="remove-btn text-red-400 hover:text-red-300 font-bold text-xl">&times;</button>`;
-                $('#player-list').appendChild(playerCard);
-            });
-            updateButtonStates();
-        };
-
-        const renderSavedGroups = () => {
-            const seasonData = getCurrentSeasonData();
-            if (!seasonData) return;
-            const groups = seasonData.groups || {};
-            const dropdown = $('#saved-groups-dropdown');
-            dropdown.innerHTML = '<option value="">-- 그룹 선택 --</option>';
-            Object.keys(groups).sort().forEach(name => {
-                const option = document.createElement('option');
-                option.value = name;
-                option.textContent = name;
-                dropdown.appendChild(option);
-            });
-            updateButtonStates();
+            if (targetView === 'compare-view') renderCompareView();
         };
         
-        const renderRankingList = () => {
-            const seasonData = getCurrentSeasonData();
-            if (!seasonData || !seasonData.masterPlayerList) return;
-            const sortedPlayers = Object.values(seasonData.masterPlayerList).sort((a, b) => b.rating - a.rating);
-            $('#ranking-list').innerHTML = '';
-            sortedPlayers.forEach((player, index) => {
-                const row = document.createElement('tr');
-                row.className = 'border-b border-gray-700/50';
-                row.innerHTML = `<td class="p-3 text-lg font-bold">${index + 1}</td><td class="p-3">${player.name}</td><td class="p-3 text-cyan-300 font-semibold">${player.rating}</td>`;
-                $('#ranking-list').appendChild(row);
-            });
+        const getLeagueData = () => JSON.parse(localStorage.getItem(LEAGUE_DATA_KEY)) || {
+            currentSeason: 1,
+            seasons: {
+                1: { masterPlayerList: {}, gameHistory: [] }
+            }
         };
-        
+        const saveLeagueData = () => localStorage.setItem(LEAGUE_DATA_KEY, JSON.stringify(leagueData));
+        const getCurrentSeasonData = () => leagueData.seasons ? leagueData.seasons[leagueData.currentSeason] : { masterPlayerList: {}, gameHistory: [] };
+
+        const renderDashboard = () => {
+            const container = $('#dashboard-content');
+            container.innerHTML = '';
+            const seasonData = getCurrentSeasonData();
+            const players = Object.values(seasonData.masterPlayerList);
+            const history = seasonData.gameHistory;
+
+            if (players.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 col-span-full">데이터가 없습니다. 선수를 등록하고 게임을 시작하세요!</p>';
+                return;
+            }
+
+            const sortedPlayers = [...players].sort((a, b) => b.rating - a.rating);
+            const topPlayer = sortedPlayers[0];
+            const recentGame = history[0];
+
+            const createCard = (title, content) => `
+                <div class="bg-gray-700 p-6 rounded-lg fade-in">
+                    <h3 class="font-bold text-lg text-cyan-400 mb-2">${title}</h3>
+                    <div>${content}</div>
+                </div>`;
+
+            // 1. 현재 1위
+            container.innerHTML += createCard('현재 1위', `<p class="text-3xl font-bold">${topPlayer.name}</p><p class="text-gray-400">${topPlayer.rating}점</p>`);
+            
+            // 2. 총 플레이어 수
+            container.innerHTML += createCard('총 플레이어', `<p class="text-3xl font-bold">${players.length}명</p>`);
+
+            // 3. 최근 게임
+            let recentGameHtml = '<p class="text-gray-500">기록 없음</p>';
+            if(recentGame) {
+                const date = new Date(recentGame.date).toLocaleDateString('ko-KR');
+                recentGameHtml = `<p class="font-semibold">${recentGame.mode === 'double_up' ? '더블업' : '개인전'}</p><p class="text-sm text-gray-400">${date}</p>`;
+            }
+            container.innerHTML += createCard('최근 게임', recentGameHtml);
+        };
+
         const renderPlayerManagementView = () => {
             const container = $('#master-player-list-container');
             container.innerHTML = '';
-            const masterList = getCurrentSeasonData()?.masterPlayerList;
-            if (!masterList) return;
-
+            const masterList = getCurrentSeasonData().masterPlayerList;
+            if (Object.keys(masterList).length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500">등록된 선수가 없습니다.</p>';
+                return;
+            }
             Object.values(masterList).sort((a,b) => a.name.localeCompare(b.name)).forEach(player => {
                 const div = document.createElement('div');
-                div.className = 'bg-gray-700 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3';
+                div.className = 'bg-gray-700 p-3 rounded-lg flex items-center justify-between gap-3';
                 div.innerHTML = `
-                    <div class="flex-grow">
-                        <div class="flex items-center gap-2">
-                            <input type="checkbox" id="merge-${player.id}" data-player-id="${player.id}" class="merge-checkbox w-4 h-4 bg-gray-600 border-gray-500 rounded text-cyan-500 focus:ring-cyan-500">
-                            <label for="merge-${player.id}" class="font-bold">${player.name} <span class="text-cyan-400">(${player.rating})</span></label>
-                        </div>
+                    <div>
+                        <span class="font-bold">${player.name}</span>
+                        <span class="text-cyan-400">(${player.rating})</span>
                     </div>
-                    <div class="flex items-center gap-2 justify-end">
-                        <input type="number" class="adjust-points-input w-20 bg-gray-800 border border-gray-600 rounded-md px-2 py-1 text-white" placeholder="점수">
+                    <div class="flex items-center gap-2">
+                        <input type="number" class="adjust-points-input w-20 bg-gray-900 border border-gray-600 rounded-md px-2 py-1" placeholder="점수">
                         <button data-player-id="${player.id}" data-action="add" class="adjust-rating-btn bg-green-600 w-8 h-8 rounded hover:bg-green-500 font-bold">+</button>
                         <button data-player-id="${player.id}" data-action="subtract" class="adjust-rating-btn bg-yellow-600 w-8 h-8 rounded hover:bg-yellow-500 font-bold">-</button>
                         <button data-player-id="${player.id}" class="delete-player-btn bg-red-600 text-xl w-8 h-8 rounded hover:bg-red-500 font-bold">&times;</button>
@@ -445,14 +344,123 @@
                 `;
                 container.appendChild(div);
             });
-            
-            document.querySelectorAll('.merge-checkbox').forEach(cb => {
-                cb.addEventListener('change', () => {
-                    const selectedCount = document.querySelectorAll('.merge-checkbox:checked').length;
-                    $('#merge-players-btn').disabled = selectedCount < 2;
+        };
+
+        const renderGameCreationView = () => {
+            const container = $('#game-player-selection-list');
+            container.innerHTML = '';
+            const masterList = getCurrentSeasonData().masterPlayerList;
+            if (Object.keys(masterList).length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 col-span-full">먼저 선수를 등록해주세요.</p>';
+                return;
+            }
+            Object.values(masterList).sort((a,b) => a.name.localeCompare(b.name)).forEach(player => {
+                const isSelected = gameParticipants.some(p => p.id === player.id);
+                const button = document.createElement('button');
+                button.dataset.playerId = player.id;
+                button.className = `player-select-btn p-3 rounded-md text-left transition ${isSelected ? 'bg-cyan-600 ring-2 ring-cyan-400' : 'bg-gray-700 hover:bg-gray-600'}`;
+                button.innerHTML = `<span class="font-bold">${player.name}</span><br><span class="text-xs text-gray-400">(${player.rating})</span>`;
+                container.appendChild(button);
+            });
+            updateGameCreationButtons();
+        };
+
+        const renderRankingList = () => {
+            const seasonData = getCurrentSeasonData();
+            if (!seasonData || !seasonData.masterPlayerList) return;
+            const sortedPlayers = Object.values(seasonData.masterPlayerList).sort((a, b) => b.rating - a.rating);
+            $('#ranking-list').innerHTML = '';
+            sortedPlayers.forEach((player, index) => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-600 hover:bg-gray-700 cursor-pointer';
+                row.dataset.playerId = player.id;
+                row.innerHTML = `<td class="p-3 text-lg font-bold">${index + 1}</td><td class="p-3">${player.name}</td><td class="p-3 text-cyan-400 font-semibold">${player.rating}</td>`;
+                $('#ranking-list').appendChild(row);
+            });
+        };
+
+        const renderHallOfFame = () => {
+            const container = $('#hall-of-fame-content');
+            container.innerHTML = '';
+            const seasonData = getCurrentSeasonData();
+            const players = Object.values(seasonData.masterPlayerList);
+            const history = seasonData.gameHistory;
+
+            if (players.length === 0 || history.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 col-span-full">데이터가 부족하여 명예의 전당을 표시할 수 없습니다.</p>';
+                return;
+            }
+
+            // 분석 로직
+            const stats = {};
+            players.forEach(p => {
+                stats[p.id] = { name: p.name, firstPlaces: 0, top4s: 0, games: 0, duoPartners: {} };
+            });
+
+            history.forEach(game => {
+                if (game.mode === 'solo') {
+                    Object.entries(game.results).forEach(([pId, result]) => {
+                        if (stats[pId]) {
+                            stats[pId].games++;
+                            if (result.rank === 1) stats[pId].firstPlaces++;
+                            if (result.rank <= 4) stats[pId].top4s++;
+                        }
+                    });
+                } else { // double_up
+                    Object.values(game.results).forEach(team => {
+                        const [p1, p2] = team.players;
+                        if (stats[p1] && stats[p2]) {
+                            stats[p1].games++;
+                            stats[p2].games++;
+                            if (team.rank === 1) {
+                                stats[p1].firstPlaces++;
+                                stats[p2].firstPlaces++;
+                                stats[p1].duoPartners[p2] = (stats[p1].duoPartners[p2] || 0) + 1;
+                                stats[p2].duoPartners[p1] = (stats[p2].duoPartners[p1] || 0) + 1;
+                            }
+                        }
+                    });
+                }
+            });
+
+            // 카드 생성 함수
+            const createCard = (title, icon, value, description) => `
+                <div class="bg-gray-700 p-6 rounded-xl text-center border border-gray-600 fade-in">
+                    <div class="flex justify-center items-center mb-4">
+                        <span class="w-16 h-16 flex items-center justify-center rounded-full bg-yellow-500/10 text-yellow-400 trophy-icon">${icon}</span>
+                    </div>
+                    <h3 class="font-bold text-lg text-yellow-400 mb-1">${title}</h3>
+                    <p class="text-2xl font-semibold">${value}</p>
+                    <p class="text-sm text-gray-400">${description}</p>
+                </div>`;
+
+            // 1. 최다 1등
+            const mostFirsts = Object.values(stats).reduce((max, p) => p.firstPlaces > max.firstPlaces ? p : max, { firstPlaces: -1 });
+            if (mostFirsts.firstPlaces > 0) {
+                container.innerHTML += createCard('시즌의 지배자', '👑', mostFirsts.name, `${mostFirsts.firstPlaces}회 우승`);
+            }
+
+            // 2. 최고의 듀오
+            let bestDuo = { players: [], wins: 0 };
+            Object.entries(stats).forEach(([p1Id, p1Data]) => {
+                Object.entries(p1Data.duoPartners).forEach(([p2Id, wins]) => {
+                    if (wins > bestDuo.wins && p1Id < p2Id) { // 중복 방지
+                        bestDuo = { players: [p1Data.name, stats[p2Id].name], wins };
+                    }
                 });
             });
-            $('#merge-players-btn').disabled = true;
+            if (bestDuo.wins > 0) {
+                 container.innerHTML += createCard('최고의 듀오', '🤝', bestDuo.players.join(' & '), `${bestDuo.wins}회 함께 우승`);
+            }
+            
+            // 3. 꾸준함의 상징 (승률 1위)
+            const mostConsistent = Object.values(stats)
+                .filter(p => p.games > 0)
+                .reduce((max, p) => (p.top4s / p.games) > (max.top4s / max.games) ? p : max, { top4s: 0, games: 1 });
+            if (mostConsistent.games > 0) {
+                const winRate = ((mostConsistent.top4s / mostConsistent.games) * 100).toFixed(1);
+                container.innerHTML += createCard('꾸준함의 상징', '📈', mostConsistent.name, `Top 4 비율 ${winRate}%`);
+            }
         };
 
         const renderCustomTeamView = () => {
@@ -463,48 +471,61 @@
 
             const assignedPlayerIds = new Set(customTeamAssignment.teams.flat().filter(Boolean).map(p => p.id));
             
-            currentPlayers.forEach(player => {
+            gameParticipants.forEach(player => {
                 if (assignedPlayerIds.has(player.id)) return;
-                const playerBtn = document.createElement('button');
-                playerBtn.className = `w-full text-left p-3 bg-gray-700 rounded-md hover:bg-gray-600 transition`;
-                if (player.id === customTeamAssignment.selectedPlayerId) playerBtn.classList.add('player-selected');
-                playerBtn.textContent = `${player.name} (${player.rating})`;
-                playerBtn.dataset.playerId = player.id;
-                playerBtn.onclick = () => selectCustomPlayer(player.id);
-                availablePlayersContainer.appendChild(playerBtn);
+                const playerCard = createPlayerCard(player);
+                availablePlayersContainer.appendChild(playerCard);
             });
 
-            customTeamAssignment.teams.forEach((team, teamIndex) => {
+            const teamCount = gameParticipants.length / 2;
+            for (let i = 0; i < teamCount; i++) {
                 const teamDiv = document.createElement('div');
-                teamDiv.className = 'bg-gray-700/50 p-3 rounded-lg';
-                teamDiv.innerHTML = `<h4 class="font-semibold text-center text-cyan-400 mb-2">팀 ${teamIndex + 1}</h4>`;
+                teamDiv.className = 'bg-gray-700 p-3 rounded-lg';
+                teamDiv.innerHTML = `<h4 class="font-semibold text-center text-cyan-400 mb-2">팀 ${i + 1}</h4>`;
                 const memberList = document.createElement('div');
                 memberList.className = 'space-y-2';
-                for (let i = 0; i < 2; i++) {
-                    const player = team[i];
-                    const slot = document.createElement('div');
-                    slot.className = 'p-3 bg-gray-800 rounded-md text-center cursor-pointer hover:bg-gray-700';
+                for (let j = 0; j < 2; j++) {
+                    const player = customTeamAssignment.teams[i]?.[j];
+                    const slot = createDropZone(i, j);
                     if (player) {
-                        slot.textContent = player.name;
-                        slot.onclick = () => unassignPlayer(teamIndex, i);
-                    } else {
-                        slot.textContent = '선수 배정';
-                        slot.className += ' text-gray-500';
-                        slot.onclick = () => assignPlayer(teamIndex, i);
+                        slot.appendChild(createPlayerCard(player));
                     }
                     memberList.appendChild(slot);
                 }
                 teamDiv.appendChild(memberList);
                 teamSlotsContainer.appendChild(teamDiv);
-            });
-
-            $('#confirm-custom-teams-btn').disabled = assignedPlayerIds.size !== currentPlayers.length;
+            }
+            
+            $('#confirm-custom-teams-btn').disabled = assignedPlayerIds.size !== gameParticipants.length;
+        };
+        
+        const createPlayerCard = (player) => {
+            const card = document.createElement('div');
+            card.id = `card-${player.id}`;
+            card.dataset.playerId = player.id;
+            card.className = 'player-card p-3 bg-gray-700 rounded-md text-left transition';
+            card.draggable = true;
+            card.innerHTML = `<span class="font-bold pointer-events-none">${player.name}</span><br><span class="text-xs text-gray-400 pointer-events-none">(${player.rating})</span>`;
+            return card;
         };
 
+        const createDropZone = (teamIndex, slotIndex) => {
+            const slot = document.createElement('div');
+            slot.className = 'drop-zone p-3 bg-gray-900/50 rounded-md text-center min-h-[68px] border-2 border-dashed border-gray-600 transition';
+            slot.dataset.teamIndex = teamIndex;
+            slot.dataset.slotIndex = slotIndex;
+            if (!customTeamAssignment.teams[teamIndex]?.[slotIndex]) {
+                slot.innerHTML = '<span class="text-gray-500 pointer-events-none">여기에 드롭</span>';
+            }
+            return slot;
+        };
+        
         const renderGameHistory = (seasonNum = leagueData.currentSeason) => {
             const selector = $('#history-season-selector');
+            const playerFilter = $('#history-player-filter');
             selector.innerHTML = '';
-            if (!leagueData.seasons) return;
+            playerFilter.innerHTML = '<option value="all">모든 선수</option>';
+
             Object.keys(leagueData.seasons).sort((a,b) => b-a).forEach(sNum => {
                 const option = document.createElement('option');
                 option.value = sNum;
@@ -513,17 +534,42 @@
                 selector.appendChild(option);
             });
             
+            const seasonData = leagueData.seasons[seasonNum];
+            Object.values(seasonData.masterPlayerList).sort((a,b) => a.name.localeCompare(b.name)).forEach(player => {
+                const option = document.createElement('option');
+                option.value = player.id;
+                option.textContent = player.name;
+                playerFilter.appendChild(option);
+            });
+
             const historyList = $('#game-history-list');
             historyList.innerHTML = '';
-            const seasonData = leagueData.seasons[seasonNum];
             if (!seasonData || !seasonData.gameHistory || seasonData.gameHistory.length === 0) {
                 historyList.innerHTML = '<p class="text-center text-gray-500">이 시즌의 게임 기록이 없습니다.</p>';
                 return;
             }
 
-            [...seasonData.gameHistory].forEach(game => {
+            const selectedPlayerId = playerFilter.value;
+            const selectedMode = $('#history-mode-filter').value;
+
+            const filteredHistory = seasonData.gameHistory.filter(game => {
+                const playerInGame = (pId) => {
+                    if (game.mode === 'solo') return !!game.results[pId];
+                    return Object.values(game.results).some(t => t.players.includes(pId));
+                };
+                const playerMatch = selectedPlayerId === 'all' || playerInGame(selectedPlayerId);
+                const modeMatch = selectedMode === 'all' || game.mode === selectedMode;
+                return playerMatch && modeMatch;
+            });
+
+            if (filteredHistory.length === 0) {
+                historyList.innerHTML = '<p class="text-center text-gray-500">필터 조건에 맞는 기록이 없습니다.</p>';
+                return;
+            }
+
+            filteredHistory.forEach(game => {
                 const gameCard = document.createElement('div');
-                gameCard.className = 'bg-gray-700/50 p-4 rounded-lg';
+                gameCard.className = 'bg-gray-700 p-4 rounded-lg';
                 const date = new Date(game.date).toLocaleString('ko-KR');
                 let resultsHtml = '';
                 
@@ -553,24 +599,124 @@
             });
         };
 
-        const updateButtonStates = () => {
-            const playerCount = currentPlayers.length;
-            const selectedGroup = $('#saved-groups-dropdown').value;
+        const renderCompareView = () => {
+            const p1Select = $('#compare-player1');
+            const p2Select = $('#compare-player2');
+            p1Select.innerHTML = '';
+            p2Select.innerHTML = '';
+            
+            const players = Object.values(getCurrentSeasonData().masterPlayerList).sort((a,b) => a.name.localeCompare(b.name));
+            if(players.length < 2) {
+                $('#compare-result').innerHTML = '<p class="text-center text-gray-500">비교하려면 2명 이상의 선수가 필요합니다.</p>';
+                return;
+            }
+
+            players.forEach(p => {
+                const opt1 = document.createElement('option');
+                opt1.value = p.id;
+                opt1.textContent = p.name;
+                p1Select.appendChild(opt1);
+
+                const opt2 = document.createElement('option');
+                opt2.value = p.id;
+                opt2.textContent = p.name;
+                p2Select.appendChild(opt2);
+            });
+            p2Select.selectedIndex = 1;
+
+            const updateComparison = () => {
+                const p1Id = p1Select.value;
+                const p2Id = p2Select.value;
+                const resultContainer = $('#compare-result');
+
+                if (p1Id === p2Id) {
+                    resultContainer.innerHTML = '<p class="text-center text-gray-500">서로 다른 선수를 선택해주세요.</p>';
+                    return;
+                }
+                
+                const p1Stats = { wins: 0, totalGames: 0, avgRank: 0, ranks: [] };
+                const p2Stats = { wins: 0, totalGames: 0, avgRank: 0, ranks: [] };
+
+                getCurrentSeasonData().gameHistory.forEach(game => {
+                    const playerInGame = (pId) => {
+                        if (game.mode === 'solo') return !!game.results[pId];
+                        return Object.values(game.results).some(t => t.players.includes(pId));
+                    };
+
+                    if (playerInGame(p1Id) && playerInGame(p2Id)) {
+                        p1Stats.totalGames++;
+                        p2Stats.totalGames++;
+                        
+                        let p1Rank, p2Rank;
+                        if(game.mode === 'solo') {
+                            p1Rank = game.results[p1Id].rank;
+                            p2Rank = game.results[p2Id].rank;
+                        } else {
+                            p1Rank = Object.values(game.results).find(t => t.players.includes(p1Id)).rank;
+                            p2Rank = Object.values(game.results).find(t => t.players.includes(p2Id)).rank;
+                        }
+
+                        p1Stats.ranks.push(p1Rank);
+                        p2Stats.ranks.push(p2Rank);
+
+                        if (p1Rank < p2Rank) p1Stats.wins++;
+                        else if (p2Rank < p1Rank) p2Stats.wins++;
+                    }
+                });
+
+                if (p1Stats.totalGames > 0) {
+                    p1Stats.avgRank = (p1Stats.ranks.reduce((a, b) => a + b, 0) / p1Stats.totalGames).toFixed(2);
+                    p2Stats.avgRank = (p2Stats.ranks.reduce((a, b) => a + b, 0) / p2Stats.totalGames).toFixed(2);
+                }
+
+                resultContainer.innerHTML = `
+                    <div class="grid grid-cols-3 text-center items-center">
+                        <div class="p-4">
+                            <p class="text-4xl font-bold ${p1Stats.wins > p2Stats.wins ? 'text-green-400' : ''}">${p1Stats.wins}</p>
+                            <p class="text-gray-400">승리</p>
+                        </div>
+                        <div class="p-4 border-l border-r border-gray-600">
+                            <p class="text-lg font-semibold">총 게임</p>
+                            <p class="text-2xl font-bold text-cyan-400">${p1Stats.totalGames}</p>
+                        </div>
+                        <div class="p-4">
+                            <p class="text-4xl font-bold ${p2Stats.wins > p1Stats.wins ? 'text-green-400' : ''}">${p2Stats.wins}</p>
+                            <p class="text-gray-400">승리</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 text-center items-center mt-4 border-t border-gray-600 pt-4">
+                        <div class="p-4">
+                            <p class="text-lg font-semibold">평균 등수</p>
+                            <p class="text-2xl font-bold ${p1Stats.avgRank < p2Stats.avgRank ? 'text-green-400' : ''}">${p1Stats.avgRank > 0 ? p1Stats.avgRank : '-'}</p>
+                        </div>
+                        <div></div>
+                        <div class="p-4">
+                            <p class="text-lg font-semibold">평균 등수</p>
+                            <p class="text-2xl font-bold ${p2Stats.avgRank < p1Stats.avgRank ? 'text-green-400' : ''}">${p2Stats.avgRank > 0 ? p2Stats.avgRank : '-'}</p>
+                        </div>
+                    </div>
+                `;
+            };
+
+            p1Select.onchange = updateComparison;
+            p2Select.onchange = updateComparison;
+            updateComparison();
+        };
+
+        const updateGameCreationButtons = () => {
+            const playerCount = gameParticipants.length;
+            const errorDiv = $('#game-creation-error');
             
             if (currentGameMode === 'double_up') {
                 const isValidCount = playerCount > 0 && [2, 4, 6, 8].includes(playerCount);
                 $('#generate-random-btn').disabled = !isValidCount;
                 $('#generate-balanced-btn').disabled = !isValidCount;
                 $('#generate-custom-btn').disabled = !isValidCount;
-                $('#error-message').textContent = (playerCount > 0 && !isValidCount) ? `더블업 모드는 2, 4, 6, 8명이어야 합니다.` : '';
+                errorDiv.textContent = (playerCount > 0 && !isValidCount) ? `더블업 모드는 2, 4, 6, 8명이어야 합니다.` : '';
             } else { // solo
                 $('#start-solo-game-btn').disabled = playerCount < 2;
-                $('#error-message').textContent = (playerCount > 0 && playerCount < 2) ? '개인전은 2명 이상이어야 합니다.' : '';
+                errorDiv.textContent = (playerCount > 0 && playerCount < 2) ? '개인전은 2명 이상이어야 합니다.' : '';
             }
-
-            $('#save-group-btn').disabled = playerCount === 0;
-            $('#load-group-btn').disabled = !selectedGroup;
-            $('#delete-group-btn').disabled = !selectedGroup;
         };
 
         const showToast = (message, duration = 2000) => {
@@ -588,165 +734,143 @@
                 const button = document.createElement('button');
                 button.textContent = action.label;
                 button.className = action.classes;
-                button.onclick = async () => {
-                    await action.callback();
-                    $('#modal').classList.add('hidden');
-                };
+                button.onclick = () => { action.callback(); $('#modal').classList.add('hidden'); };
                 actionsContainer.appendChild(button);
             });
             $('#modal').classList.remove('hidden');
         };
 
-        const handleAddPlayer = async () => {
-            const name = $('#player-name').value.trim();
+        const handleAddPlayer = () => {
+            const name = $('#player-name-input').value.trim();
             if (!name) return showToast('플레이어 이름을 입력해주세요.');
             
             const seasonData = getCurrentSeasonData();
-            if (!seasonData) return showToast("시즌 데이터가 없습니다.");
-            if (Object.values(seasonData.masterPlayerList).find(p => p.name === name) || currentPlayers.find(p => p.name === name)) {
-                return showToast('이미 등록되었거나 목록에 있는 플레이어입니다.');
+            if (Object.values(seasonData.masterPlayerList).find(p => p.name === name)) {
+                return showToast('이미 등록된 플레이어입니다.');
             }
 
-            const newPlayerId = `player_${Date.now()}`;
-            const newPlayer = { id: newPlayerId, name, rating: DEFAULT_RATING };
+            const newPlayer = { id: `player_${Date.now()}`, name, rating: DEFAULT_RATING };
+            seasonData.masterPlayerList[newPlayer.id] = newPlayer;
+            saveLeagueData();
             
-            const playerPath = `seasons.${leagueData.currentSeason}.masterPlayerList.${newPlayerId}`;
-            try {
-                await updateDoc(leagueDocRef(), { [playerPath]: newPlayer });
-                showToast(`${name} 플레이어가 등록되었습니다.`);
-                $('#player-name').value = '';
-            } catch (error) {
-                console.error("플레이어 추가 에러:", error);
-                showToast("플레이어 추가에 실패했습니다.");
+            renderPlayerManagementView();
+            $('#player-name-input').value = '';
+            showToast(`${name} 선수가 등록되었습니다.`);
+        };
+
+        const handleAdjustRating = (playerId, points) => {
+            const masterList = getCurrentSeasonData().masterPlayerList;
+            if (masterList[playerId]) {
+                masterList[playerId].rating += points;
+                saveLeagueData();
+                showToast(`${masterList[playerId].name}님의 점수가 ${points > 0 ? '+' : ''}${points}점 조정되었습니다.`);
+                renderPlayerManagementView();
             }
         };
-        
-        const handleRemovePlayer = (id) => {
-            currentPlayers = currentPlayers.filter(p => p.id !== id);
-            renderPlayerList();
-        };
 
-        const handleSaveGroup = () => {
-            showModal({
-                title: '그룹 저장',
-                body: '<input type="text" id="group-name-input" class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white" placeholder="저장할 그룹 이름 입력">',
-                actions: [
-                    { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '저장', classes: 'bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
-                        const name = $('#group-name-input').value.trim();
-                        if (!name) return showToast('그룹 이름을 입력해야 합니다.');
-                        
-                        const groupPath = `seasons.${leagueData.currentSeason}.groups.${name}`;
-                        const playerIds = currentPlayers.map(p => p.id);
-                        try {
-                            await updateDoc(leagueDocRef(), { [groupPath]: playerIds });
-                            showToast(`'${name}' 그룹이 저장되었습니다.`);
-                        } catch (error) {
-                            console.error("그룹 저장 에러:", error);
-                            showToast("그룹 저장에 실패했습니다.");
-                        }
-                    }}
-                ]
-            });
-            setTimeout(() => $('#group-name-input').focus(), 100);
-        };
-
-        const handleLoadGroup = () => {
-            const name = $('#saved-groups-dropdown').value;
-            if (!name) return;
+        const handleDeletePlayer = (playerId) => {
             const seasonData = getCurrentSeasonData();
-            if (!seasonData) return;
-            const playerIds = seasonData.groups[name] || [];
-            currentPlayers = playerIds.map(id => seasonData.masterPlayerList[id]).filter(Boolean);
-            renderPlayerList();
-            showToast(`'${name}' 그룹을 불러왔습니다.`);
-        };
+            const playerToDelete = seasonData.masterPlayerList[playerId];
+            if (!playerToDelete) return;
 
-        const handleDeleteGroup = () => {
-            const name = $('#saved-groups-dropdown').value;
-            if (!name) return;
             showModal({
-                title: '그룹 삭제 확인',
-                body: `<p class="text-gray-300">정말로 <strong class="text-cyan-400">${name}</strong> 그룹을 삭제하시겠습니까?</p>`,
+                title: '선수 삭제 확인',
+                body: `<p class="text-gray-300">정말로 <strong class="text-cyan-400">${playerToDelete.name}</strong> 선수를 영구적으로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</p>`,
                 actions: [
                     { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '삭제', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
-                        const groupPath = `seasons.${leagueData.currentSeason}.groups.${name}`;
-                        try {
-                            await updateDoc(leagueDocRef(), { [groupPath]: deleteField() });
-                            showToast(`'${name}' 그룹이 삭제되었습니다.`);
-                        } catch (error) {
-                            console.error("그룹 삭제 에러:", error);
-                            showToast("그룹 삭제에 실패했습니다.");
-                        }
+                    { label: '삭제', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: () => {
+                        delete seasonData.masterPlayerList[playerId];
+                        saveLeagueData();
+                        showToast(`${playerToDelete.name} 선수가 삭제되었습니다.`);
+                        renderPlayerManagementView();
                     }}
                 ]
             });
         };
         
-        const displayTeams = (teams) => {
-            gameTeams = teams;
-            $('#teams-container').innerHTML = '';
-            const colors = ['#F97316', '#10B981', '#3B82F6', '#8B5CF6'];
-            teams.forEach((team, index) => {
-                const card = document.createElement('div');
-                card.className = 'fade-in bg-gray-700/50 p-6 rounded-xl text-center border border-gray-700';
-                card.style.animationDelay = `${index * 0.1}s`;
-                const color = colors[index % colors.length];
-                card.innerHTML = `<div class="flex justify-center items-center mb-4"><span class="w-12 h-12 flex items-center justify-center rounded-full" style="background-color: ${color}20;"><svg class="w-6 h-6" style="color: ${color};" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></span></div><h3 class="font-bold text-xl mb-2" style="color: ${color};">팀 ${index + 1}</h3><p class="text-xl text-gray-200 font-semibold">${team[0]?.name || ''}</p><p class="text-gray-400 text-sm my-1">&</p><p class="text-xl text-gray-200 font-semibold">${team[1]?.name || ''}</p>`;
-                $('#teams-container').appendChild(card);
-            });
-            switchView('result-section');
+        const handlePlayerSelect = (playerId) => {
+            const masterList = getCurrentSeasonData().masterPlayerList;
+            const player = masterList[playerId];
+            if (!player) return;
+
+            const index = gameParticipants.findIndex(p => p.id === playerId);
+            if (index > -1) {
+                gameParticipants.splice(index, 1);
+            } else {
+                gameParticipants.push(player);
+            }
+            renderGameCreationView();
         };
 
-        const handleGenerateRandomTeams = () => {
-            let shuffled = [...currentPlayers];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            const teams = [];
-            for (let i = 0; i < shuffled.length; i += 2) {
-                teams.push(shuffled.slice(i, i + 2));
-            }
-            displayTeams(teams);
+        const switchMode = (mode) => {
+            currentGameMode = mode;
+            $('#mode-double_up').classList.toggle('bg-purple-600', mode === 'double_up');
+            $('#mode-double_up').classList.toggle('bg-gray-700', mode !== 'double_up');
+            $('#mode-solo').classList.toggle('bg-purple-600', mode === 'solo');
+            $('#mode-solo').classList.toggle('bg-gray-700', mode !== 'solo');
+
+            $('#double-up-controls').classList.toggle('hidden', mode !== 'double_up');
+            $('#solo-controls').classList.toggle('hidden', mode !== 'solo');
+            
+            updateGameCreationButtons();
         };
-        
+
         const handleGenerateBalancedTeams = () => {
-            let sorted = [...currentPlayers].sort((a, b) => b.rating - a.rating);
+            let sorted = [...gameParticipants].sort((a, b) => b.rating - a.rating);
             const teams = [];
             while(sorted.length > 0) {
                 teams.push([sorted.shift(), sorted.pop()]);
             }
             displayTeams(teams);
         };
-        
+
+        const handleGenerateRandomTeams = () => {
+            let shuffled = [...gameParticipants];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            const teams = [];
+            for (let i = 0; i < shuffled.length; i += 2) teams.push(shuffled.slice(i, i + 2));
+            displayTeams(teams);
+        };
+
         const handleGenerateCustomTeams = () => {
-            const teamCount = currentPlayers.length / 2;
+            const teamCount = gameParticipants.length / 2;
             customTeamAssignment.teams = Array.from({ length: teamCount }, () => [null, null]);
-            customTeamAssignment.selectedPlayerId = null;
             renderCustomTeamView();
             switchView('custom-team-view');
         };
 
-        const selectCustomPlayer = (playerId) => {
-            customTeamAssignment.selectedPlayerId = playerId;
-            renderCustomTeamView();
+        const handleStartSoloGame = () => {
+            gamePlayers = [...gameParticipants];
+            handleRecordGame();
         };
 
-        const assignPlayer = (teamIndex, slotIndex) => {
-            const { selectedPlayerId } = customTeamAssignment;
-            if (!selectedPlayerId) return showToast('먼저 참가자 목록에서 플레이어를 선택하세요.');
-            const playerToAssign = currentPlayers.find(p => p.id === selectedPlayerId);
-            if (playerToAssign) {
-                customTeamAssignment.teams[teamIndex][slotIndex] = playerToAssign;
-                customTeamAssignment.selectedPlayerId = null;
-                renderCustomTeamView();
+        const handleDrop = (dropZone, droppedPlayerId) => {
+            const player = gameParticipants.find(p => p.id === droppedPlayerId);
+            if (!player) return;
+
+            const { teamIndex, slotIndex } = dropZone.dataset;
+            
+            // 기존 위치에서 제거
+            customTeamAssignment.teams.forEach((team, tIdx) => {
+                team.forEach((p, sIdx) => {
+                    if (p && p.id === droppedPlayerId) {
+                        customTeamAssignment.teams[tIdx][sIdx] = null;
+                    }
+                });
+            });
+            
+            // 새 위치에 추가 (기존 선수가 있다면 되돌려놓기)
+            const existingPlayer = customTeamAssignment.teams[teamIndex][slotIndex];
+            customTeamAssignment.teams[teamIndex][slotIndex] = player;
+
+            if (existingPlayer) {
+                const availablePlayersContainer = $('#custom-available-players');
+                availablePlayersContainer.appendChild(createPlayerCard(existingPlayer));
             }
-        };
-
-        const unassignPlayer = (teamIndex, slotIndex) => {
-            customTeamAssignment.teams[teamIndex][slotIndex] = null;
+            
             renderCustomTeamView();
         };
 
@@ -755,60 +879,26 @@
             if (finalTeams.some(team => team.length !== 2)) return showToast('모든 팀을 2명으로 구성해야 합니다.');
             displayTeams(finalTeams);
         };
-
-        const handleMergePlayers = () => {
-            const selectedCheckboxes = document.querySelectorAll('.merge-checkbox:checked');
-            const selectedIds = Array.from(selectedCheckboxes).map(cb => cb.dataset.playerId);
-            const masterList = getCurrentSeasonData().masterPlayerList;
-            const selectedPlayers = selectedIds.map(id => masterList[id]);
-
-            let modalBody = '<p class="text-gray-300 mb-4">어떤 선수 정보를 기준으로 통합할까요?</p>';
-            selectedPlayers.forEach((p, index) => {
-                modalBody += `<div class="flex items-center"><input type="radio" name="primary-player" value="${p.id}" id="primary-${p.id}" ${index === 0 ? 'checked' : ''} class="w-4 h-4"><label for="primary-${p.id}" class="ml-2">${p.name} (${p.rating})</label></div>`;
+        
+        const displayTeams = (teams) => {
+            gameTeams = teams;
+            $('#teams-container').innerHTML = '';
+            const colors = ['#F97316', '#10B981', '#3B82F6', '#8B5CF6'];
+            teams.forEach((team, index) => {
+                const card = document.createElement('div');
+                card.className = 'fade-in bg-gray-700 p-6 rounded-xl text-center border border-gray-600';
+                card.style.animationDelay = `${index * 0.1}s`;
+                const color = colors[index % colors.length];
+                card.innerHTML = `<div class="flex justify-center items-center mb-4"><span class="w-12 h-12 flex items-center justify-center rounded-full" style="background-color: ${color}20;"><svg class="w-6 h-6" style="color: ${color};" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></span></div><h3 class="font-bold text-xl mb-2" style="color: ${color};">팀 ${index + 1}</h3><p class="text-xl font-semibold">${team[0].name}</p><p class="text-gray-400 text-sm my-1">&</p><p class="text-xl font-semibold">${team[1].name}</p>`;
+                $('#teams-container').appendChild(card);
             });
-
-            showModal({
-                title: '선수 통합',
-                body: modalBody,
-                actions: [
-                    { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '통합 실행', classes: 'bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
-                        const primaryId = document.querySelector('input[name="primary-player"]:checked').value;
-                        const secondaryIds = selectedIds.filter(id => id !== primaryId);
-                        
-                        const seasonData = getCurrentSeasonData();
-                        const updates = {};
-                        
-                        Object.keys(seasonData.groups).forEach(groupName => {
-                            const group = seasonData.groups[groupName];
-                            const needsUpdate = group.some(id => secondaryIds.includes(id));
-                            if (needsUpdate) {
-                                const updatedIds = group.map(id => secondaryIds.includes(id) ? primaryId : id);
-                                updates[`seasons.${leagueData.currentSeason}.groups.${groupName}`] = [...new Set(updatedIds)];
-                            }
-                        });
-
-                        secondaryIds.forEach(id => {
-                            updates[`seasons.${leagueData.currentSeason}.masterPlayerList.${id}`] = deleteField();
-                        });
-
-                        try {
-                            if (Object.keys(updates).length > 0) {
-                                await updateDoc(leagueDocRef(), updates);
-                            }
-                            showToast('선수 정보가 통합되었습니다.');
-                        } catch(e) {
-                            console.error("선수 통합 에러: ", e);
-                            showToast("선수 통합에 실패했습니다.");
-                        }
-                    }}
-                ]
-            });
+            switchView('result-section');
         };
 
-        const handleStartSoloGame = () => {
-            gamePlayers = [...currentPlayers];
-            handleRecordGame();
+        const handleReset = () => {
+            gameTeams = [];
+            gamePlayers = [];
+            switchView('game-creation-view');
         };
 
         const handleRecordGame = () => {
@@ -819,11 +909,12 @@
                 gameTeams.forEach((team, index) => {
                     const div = document.createElement('div');
                     div.className = 'flex items-center justify-between gap-4';
-                    div.innerHTML = `<label class="text-lg font-medium text-gray-200">팀 ${index + 1}: ${team.map(p=>p.name).join(', ')}</label>
-                                     <select data-team-index="${index}" class="rank-selector w-24 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white">
-                                         <option value="">등수</option>
-                                         ${ranks.map(r => `<option value="${r}">${r}등</option>`).join('')}
-                                     </select>`;
+                    div.innerHTML = `
+                        <label class="text-lg font-medium">팀 ${index + 1}: ${team.map(p=>p.name).join(', ')}</label>
+                        <select data-team-index="${index}" class="rank-selector w-24 bg-gray-700 border border-gray-600 rounded-md px-3 py-2">
+                            <option value="">등수</option>
+                            ${ranks.map(r => `<option value="${r}">${r}등</option>`).join('')}
+                        </select>`;
                     recordList.appendChild(div);
                 });
             } else { // solo
@@ -831,18 +922,19 @@
                 gamePlayers.forEach(player => {
                     const div = document.createElement('div');
                     div.className = 'flex items-center justify-between gap-4';
-                    div.innerHTML = `<label class="text-lg font-medium text-gray-200">${player.name}</label>
-                                     <select data-player-id="${player.id}" class="rank-selector w-24 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white">
-                                         <option value="">등수</option>
-                                         ${ranks.map(r => `<option value="${r}">${r}등</option>`).join('')}
-                                     </select>`;
+                    div.innerHTML = `
+                        <label class="text-lg font-medium">${player.name}</label>
+                        <select data-player-id="${player.id}" class="rank-selector w-24 bg-gray-700 border border-gray-600 rounded-md px-3 py-2">
+                            <option value="">등수</option>
+                            ${ranks.map(r => `<option value="${r}">${r}등</option>`).join('')}
+                        </select>`;
                     recordList.appendChild(div);
                 });
             }
             switchView('record-view');
         };
 
-        const handleSaveRecord = async () => {
+        const handleSaveRecord = () => {
             const rankSelectors = document.querySelectorAll('.rank-selector');
             const ranks = new Set();
             let isAllSelected = true;
@@ -865,9 +957,6 @@
                 mode: currentGameMode,
                 results: {}
             };
-            
-            const batch = writeBatch(db);
-            const ref = leagueDocRef();
 
             if (currentGameMode === 'double_up') {
                 rankSelectors.forEach(sel => {
@@ -876,56 +965,39 @@
                     const ratingChange = DOUBLE_UP_POINTS[rank];
                     const team = gameTeams[teamIndex];
                     
-                    if (team && ratingChange !== undefined) {
+                    if (team && ratingChange) {
                         team.forEach(player => {
-                            if (seasonData.masterPlayerList[player.id]) {
-                                const playerRatingPath = `seasons.${leagueData.currentSeason}.masterPlayerList.${player.id}.rating`;
-                                const currentRating = seasonData.masterPlayerList[player.id].rating;
-                                batch.update(ref, { [playerRatingPath]: currentRating + ratingChange });
-                            }
+                            if(seasonData.masterPlayerList[player.id]) seasonData.masterPlayerList[player.id].rating += ratingChange;
                         });
                         gameRecord.results[`team_${teamIndex}`] = { rank, players: team.map(p => p.id) };
                     }
                 });
             } else { // solo
                 const pointScheme = SOLO_POINTS[gamePlayers.length];
-                if (!pointScheme) {
-                    showToast(`${gamePlayers.length}인용 점수 체계가 없습니다.`);
-                    return;
-                }
                 rankSelectors.forEach(sel => {
                     const playerId = sel.dataset.playerId;
                     const rank = parseInt(sel.value);
                     const ratingChange = pointScheme[rank - 1];
-                    if (seasonData.masterPlayerList[playerId] && ratingChange !== undefined) {
-                        const playerRatingPath = `seasons.${leagueData.currentSeason}.masterPlayerList.${playerId}.rating`;
-                        const currentRating = seasonData.masterPlayerList[playerId].rating;
-                        batch.update(ref, { [playerRatingPath]: currentRating + ratingChange });
+                    if (seasonData.masterPlayerList[playerId] && ratingChange) {
+                        seasonData.masterPlayerList[playerId].rating += ratingChange;
                         gameRecord.results[playerId] = { rank, ratingChange };
                     }
                 });
             }
             
-            const newHistory = [gameRecord, ...(seasonData.gameHistory || [])];
-            const historyPath = `seasons.${leagueData.currentSeason}.gameHistory`;
-            batch.update(ref, { [historyPath]: newHistory });
-
-            try {
-                await batch.commit();
-                showToast('전적이 기록되고 레이팅이 업데이트되었습니다!');
-                switchView('ranking-view');
-            } catch (error) {
-                console.error("전적 저장 에러:", error);
-                showToast("전적 저장에 실패했습니다.");
-            }
+            seasonData.gameHistory.unshift(gameRecord);
+            saveLeagueData();
+            showToast('전적이 기록되고 레이팅이 업데이트되었습니다!');
+            switchView('ranking-view');
         };
         
-        const handleReset = () => {
-            currentPlayers = [];
-            gameTeams = [];
-            gamePlayers = [];
-            renderPlayerList();
-            switchView('team-generator-view');
+        const handleExportData = () => {
+            const dataString = JSON.stringify(leagueData, null, 2);
+            const textarea = $('#export-data-textarea');
+            textarea.value = dataString;
+            textarea.select();
+            try { document.execCommand('copy'); showToast('데이터가 클립보드에 복사되었습니다!'); }
+            catch (err) { showToast('복사에 실패했습니다. 수동으로 복사해주세요.'); }
         };
 
         const handleImportData = () => {
@@ -933,60 +1005,20 @@
             if (!dataString.trim()) return showToast('가져올 데이터를 붙여넣어 주세요.');
 
             showModal({
-                title: 'Firebase로 데이터 가져오기',
-                body: '<p class="text-gray-300">정말로 이 데이터로 Firebase를 덮어쓰시겠습니까? 이 작업은 되돌릴 수 없습니다.</p>',
+                title: '데이터 가져오기 확인',
+                body: '<p class="text-gray-300">정말로 데이터를 가져오시겠습니까? 현재 모든 데이터가 덮어쓰여집니다.</p>',
                 actions: [
                     { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '덮어쓰기', classes: 'bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
+                    { label: '가져오기', classes: 'bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-4 rounded', callback: () => {
                         try {
                             const importedData = JSON.parse(dataString);
                             if (importedData.currentSeason && importedData.seasons) {
-                                await setDoc(leagueDocRef(), importedData);
-                                showToast('Firebase에 데이터를 성공적으로 덮어썼습니다!');
-                                $('#import-data-textarea').value = '';
+                                leagueData = importedData;
+                                saveLeagueData();
+                                showToast('데이터를 성공적으로 가져왔습니다! 페이지를 새로고침합니다.');
+                                setTimeout(() => location.reload(), 1500);
                             } else { throw new Error('Invalid data structure'); }
-                        } catch (error) { 
-                            console.error("데이터 가져오기 에러:", error);
-                            showToast('데이터 형식이 올바르지 않거나 가져오기에 실패했습니다.'); 
-                        }
-                    }}
-                ]
-            });
-        };
-
-        const handleAdjustRating = async (playerId, points) => {
-            const masterList = getCurrentSeasonData().masterPlayerList;
-            if (masterList && masterList[playerId]) {
-                const playerRatingPath = `seasons.${leagueData.currentSeason}.masterPlayerList.${playerId}.rating`;
-                const currentRating = masterList[playerId].rating;
-                try {
-                    await updateDoc(leagueDocRef(), { [playerRatingPath]: currentRating + points });
-                    showToast(`${masterList[playerId].name}님의 점수가 ${points > 0 ? '+' : ''}${points}점 조정되었습니다.`);
-                } catch(e) {
-                    showToast("점수 조정에 실패했습니다.");
-                }
-            }
-        };
-
-        const handleDeletePlayer = (playerId) => {
-            const seasonData = getCurrentSeasonData();
-            if (!seasonData) return;
-            const playerToDelete = seasonData.masterPlayerList[playerId];
-            if (!playerToDelete) return;
-
-            showModal({
-                title: '선수 삭제 확인',
-                body: `<p class="text-gray-300">정말로 <strong class="text-cyan-400">${playerToDelete.name}</strong> 선수를 영구적으로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</p>`,
-                actions: [
-                    { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '삭제', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
-                        const playerPath = `seasons.${leagueData.currentSeason}.masterPlayerList.${playerId}`;
-                        try {
-                            await updateDoc(leagueDocRef(), { [playerPath]: deleteField() });
-                            showToast(`${playerToDelete.name} 선수가 삭제되었습니다.`);
-                        } catch(e) {
-                            showToast("선수 삭제에 실패했습니다.");
-                        }
+                        } catch (error) { showToast('데이터 형식이 올바르지 않습니다.'); }
                     }}
                 ]
             });
@@ -998,81 +1030,141 @@
                 body: `<p class="text-gray-300">정말로 새 시즌을 시작하시겠습니까? 모든 플레이어의 점수가 ${DEFAULT_RATING}점으로 초기화됩니다. 이전 시즌 기록은 보존됩니다.</p>`,
                 actions: [
                     { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
-                    { label: '새 시즌 시작', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: async () => {
+                    { label: '새 시즌 시작', classes: 'bg-red-600 hover:bg-red-500 text-white font-bold py-2 px-4 rounded', callback: () => {
                         const lastSeasonData = getCurrentSeasonData();
-                        if (!lastSeasonData) return showToast("현재 시즌 데이터가 없어 새 시즌을 시작할 수 없습니다.");
-                        
-                        const newSeasonNumber = leagueData.currentSeason + 1;
+                        leagueData.currentSeason += 1;
+                        const newSeasonNumber = leagueData.currentSeason;
                         
                         const newMasterList = {};
                         Object.values(lastSeasonData.masterPlayerList).forEach(player => {
                             newMasterList[player.id] = { ...player, rating: DEFAULT_RATING };
                         });
 
-                        const newSeasonPath = `seasons.${newSeasonNumber}`;
-                        const newSeasonData = {
+                        leagueData.seasons[newSeasonNumber] = {
                             masterPlayerList: newMasterList,
-                            groups: {},
                             gameHistory: []
                         };
                         
-                        try {
-                            await updateDoc(leagueDocRef(), {
-                                currentSeason: newSeasonNumber,
-                                [newSeasonPath]: newSeasonData
-                            });
-                            showToast(`시즌 ${newSeasonNumber}이 시작되었습니다!`);
-                            switchView('ranking-view');
-                        } catch(e) {
-                            showToast("새 시즌 시작에 실패했습니다.");
-                        }
+                        saveLeagueData();
+                        showToast(`시즌 ${newSeasonNumber}이 시작되었습니다!`);
+                        $('#season-display').textContent = `시즌 ${newSeasonNumber}`;
+                        switchView('ranking-view');
                     }}
                 ]
             });
         };
 
-        const switchMode = (mode) => {
-            currentGameMode = mode;
-            $('#mode-double_up').classList.toggle('bg-purple-600', mode === 'double_up');
-            $('#mode-double_up').classList.toggle('bg-gray-700', mode !== 'double_up');
-            $('#mode-solo').classList.toggle('bg-purple-600', mode === 'solo');
-            $('#mode-solo').classList.toggle('bg-gray-700', mode !== 'solo');
+        const handleUndoLastGame = () => {
+            const seasonData = getCurrentSeasonData();
+            if (seasonData.gameHistory.length === 0) {
+                return showToast('되돌릴 게임이 없습니다.');
+            }
+            showModal({
+                title: '마지막 게임 되돌리기 확인',
+                body: '<p class="text-gray-300">가장 최근의 게임 기록을 삭제하고 모든 점수를 이전 상태로 되돌립니다. 이 작업은 되돌릴 수 없습니다.</p>',
+                actions: [
+                    { label: '취소', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} },
+                    { label: '실행', classes: 'bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 px-4 rounded', callback: () => {
+                        const lastGame = seasonData.gameHistory.shift(); // 첫번째 요소(최신) 제거
+                        
+                        if (lastGame.mode === 'double_up') {
+                            Object.values(lastGame.results).forEach(team => {
+                                const ratingChange = DOUBLE_UP_POINTS[team.rank];
+                                team.players.forEach(pId => {
+                                    if(seasonData.masterPlayerList[pId]) {
+                                        seasonData.masterPlayerList[pId].rating -= ratingChange;
+                                    }
+                                });
+                            });
+                        } else { // solo
+                            const pointScheme = SOLO_POINTS[Object.keys(lastGame.results).length];
+                            Object.entries(lastGame.results).forEach(([pId, result]) => {
+                                const ratingChange = pointScheme[result.rank - 1];
+                                if(seasonData.masterPlayerList[pId]) {
+                                    seasonData.masterPlayerList[pId].rating -= ratingChange;
+                                }
+                            });
+                        }
+                        saveLeagueData();
+                        showToast('마지막 게임이 성공적으로 되돌려졌습니다.');
+                        renderRankingList();
+                        renderHallOfFame();
+                    }}
+                ]
+            });
+        };
+        
+        const showRatingChart = (playerId) => {
+            const seasonData = getCurrentSeasonData();
+            const player = seasonData.masterPlayerList[playerId];
+            const history = [...seasonData.gameHistory].reverse(); // 시간 순으로
             
-            currentPlayers = [];
-            renderPlayerList();
+            const labels = ['시작'];
+            const data = [DEFAULT_RATING];
+            let currentRating = DEFAULT_RATING;
+
+            history.forEach((game, index) => {
+                let ratingChange = 0;
+                if (game.mode === 'solo' && game.results[playerId]) {
+                    ratingChange = game.results[playerId].ratingChange;
+                } else if (game.mode === 'double_up') {
+                    const team = Object.values(game.results).find(t => t.players.includes(playerId));
+                    if (team) {
+                        ratingChange = DOUBLE_UP_POINTS[team.rank];
+                    }
+                }
+                if (ratingChange !== 0) {
+                    currentRating += ratingChange;
+                    labels.push(`게임 ${index + 1}`);
+                    data.push(currentRating);
+                }
+            });
+
+            const modalBody = '<canvas id="rating-chart"></canvas>';
+            showModal({
+                title: `${player.name}님의 레이팅 변화`,
+                body: modalBody,
+                actions: [{ label: '닫기', classes: 'bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded', callback: () => {} }]
+            });
+
+            setTimeout(() => {
+                const ctx = document.getElementById('rating-chart').getContext('2d');
+                if (ratingChart) {
+                    ratingChart.destroy();
+                }
+                ratingChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '레이팅',
+                            data: data,
+                            borderColor: 'rgba(34, 211, 238, 1)',
+                            backgroundColor: 'rgba(34, 211, 238, 0.2)',
+                            fill: true,
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: { ticks: { color: '#9CA3AF' }, grid: { color: 'rgba(107, 114, 128, 0.3)'} },
+                            x: { ticks: { color: '#9CA3AF' }, grid: { color: 'rgba(107, 114, 128, 0.3)'} }
+                        },
+                        plugins: { legend: { labels: { color: '#D1D5DB' } } }
+                    }
+                });
+            }, 100);
         };
 
         // === 페이지 초기화 ===
         document.addEventListener('DOMContentLoaded', () => {
-            // 로그인/로그아웃 버튼 이벤트 리스너
-            $('#google-login-btn').addEventListener('click', handleGoogleLogin);
-            $('#logout-btn').addEventListener('click', handleLogout);
-
-            // 나머지 모든 이벤트 리스너들을 여기에 추가합니다.
-            document.querySelectorAll('.view-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+            // 모든 이벤트 리스너 연결
+            $$('.view-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
             $('#add-player-btn').addEventListener('click', handleAddPlayer);
-            $('#player-name').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleAddPlayer(); });
-            $('#player-list').addEventListener('click', (e) => { if (e.target.classList.contains('remove-btn')) handleRemovePlayer(e.target.dataset.id); });
-            $('#save-group-btn').addEventListener('click', handleSaveGroup);
-            $('#load-group-btn').addEventListener('click', handleLoadGroup);
-            $('#delete-group-btn').addEventListener('click', handleDeleteGroup);
-            $('#generate-random-btn').addEventListener('click', handleGenerateRandomTeams);
-            $('#generate-balanced-btn').addEventListener('click', handleGenerateBalancedTeams);
-            $('#generate-custom-btn').addEventListener('click', handleGenerateCustomTeams);
-            $('#cancel-custom-btn').addEventListener('click', () => switchView('team-generator-view'));
-            $('#confirm-custom-teams-btn').addEventListener('click', handleConfirmCustomTeams);
-            $('#merge-players-btn').addEventListener('click', handleMergePlayers);
-            $('#reset-btn').addEventListener('click', handleReset);
-            $('#record-game-btn').addEventListener('click', handleRecordGame);
-            $('#save-record-btn').addEventListener('click', handleSaveRecord);
-            $('#saved-groups-dropdown').addEventListener('change', updateButtonStates);
-            $('#import-data-btn').addEventListener('click', handleImportData);
-            $('#start-new-season-btn').addEventListener('click', handleStartNewSeason);
-            $('#mode-double_up').addEventListener('click', () => switchMode('double_up'));
-            $('#mode-solo').addEventListener('click', () => switchMode('solo'));
-            $('#start-solo-game-btn').addEventListener('click', handleStartSoloGame);
-            $('#history-season-selector').addEventListener('change', (e) => renderGameHistory(e.target.value));
-            $('#player-management-view').addEventListener('click', (e) => {
+            $('#player-name-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') handleAddPlayer(); });
+            
+            $('#master-player-list-container').addEventListener('click', (e) => {
                 if (e.target.classList.contains('adjust-rating-btn')) {
                     const playerId = e.target.dataset.playerId;
                     const action = e.target.dataset.action;
@@ -1090,6 +1182,85 @@
                     handleDeletePlayer(playerId);
                 }
             });
+
+            $('#game-player-selection-list').addEventListener('click', (e) => {
+                const button = e.target.closest('.player-select-btn');
+                if (button) {
+                    handlePlayerSelect(button.dataset.playerId);
+                }
+            });
+
+            $$('.mode-btn').forEach(btn => btn.addEventListener('click', (e) => switchMode(e.target.id.split('-')[1])));
+            
+            $('#generate-balanced-btn').addEventListener('click', handleGenerateBalancedTeams);
+            $('#generate-random-btn').addEventListener('click', handleGenerateRandomTeams);
+            $('#generate-custom-btn').addEventListener('click', handleGenerateCustomTeams);
+            $('#start-solo-game-btn').addEventListener('click', handleStartSoloGame);
+
+            $('#cancel-custom-btn').addEventListener('click', () => switchView('game-creation-view'));
+            $('#confirm-custom-teams-btn').addEventListener('click', handleConfirmCustomTeams);
+
+            $('#reset-btn').addEventListener('click', handleReset);
+            $('#record-game-btn').addEventListener('click', handleRecordGame);
+            $('#save-record-btn').addEventListener('click', handleSaveRecord);
+
+            $('#export-data-btn').addEventListener('click', handleExportData);
+            $('#import-data-btn').addEventListener('click', handleImportData);
+            $('#start-new-season-btn').addEventListener('click', handleStartNewSeason);
+            $('#undo-last-game-btn').addEventListener('click', handleUndoLastGame);
+            
+            $('#ranking-list').addEventListener('click', (e) => {
+                const row = e.target.closest('tr');
+                if (row && row.dataset.playerId) {
+                    showRatingChart(row.dataset.playerId);
+                }
+            });
+
+            $$('#history-season-selector, #history-player-filter, #history-mode-filter').forEach(el => {
+                el.addEventListener('change', () => renderGameHistory($('#history-season-selector').value));
+            });
+
+            // 드래그 앤 드롭 이벤트 리스너
+            document.addEventListener('dragstart', (e) => {
+                if (e.target.classList.contains('player-card')) {
+                    draggedPlayerId = e.target.dataset.playerId;
+                    setTimeout(() => e.target.classList.add('dragging'), 0);
+                }
+            });
+
+            document.addEventListener('dragend', (e) => {
+                if (e.target.classList.contains('player-card')) {
+                    draggedPlayerId = null;
+                    e.target.classList.remove('dragging');
+                }
+            });
+
+            document.addEventListener('dragover', (e) => {
+                if (e.target.closest('.drop-zone')) {
+                    e.preventDefault();
+                    e.target.closest('.drop-zone').classList.add('drag-over');
+                }
+            });
+
+            document.addEventListener('dragleave', (e) => {
+                if (e.target.closest('.drop-zone')) {
+                    e.target.closest('.drop-zone').classList.remove('drag-over');
+                }
+            });
+
+            document.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const dropZone = e.target.closest('.drop-zone');
+                if (dropZone && draggedPlayerId) {
+                    dropZone.classList.remove('drag-over');
+                    handleDrop(dropZone, draggedPlayerId);
+                }
+            });
+            
+            // 앱 시작
+            leagueData = getLeagueData();
+            $('#season-display').textContent = `시즌 ${leagueData.currentSeason}`;
+            switchView('dashboard-view');
         });
     </script>
 </body>
