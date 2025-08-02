@@ -4,11 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TFT 리그매니저 v16.3</title>
-    <!-- Tailwind CSS 로드 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js 로드 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Google Fonts (Inter & Noto Sans KR) 로드 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
@@ -33,7 +30,6 @@
 
     <div class="w-full max-w-6xl mx-auto bg-gray-800 rounded-2xl shadow-2xl p-6 md:p-8 border border-gray-700">
         
-        <!-- 헤더 및 뷰 전환 버튼 -->
         <div class="text-center mb-6">
             <h1 class="text-3xl font-bold text-cyan-400">TFT 리그 매니저</h1>
             <p id="season-display" class="text-gray-400 mt-1">시즌 1</p>
@@ -50,15 +46,12 @@
             </div>
         </div>
 
-        <!-- 뷰 컨테이너 -->
         <div id="views-container">
-            <!-- 대시보드 뷰 -->
             <div id="dashboard-view" class="fade-in">
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">리그 대시보드</h2><p class="text-gray-400 mt-2 mb-6">우리 리그의 현황을 한눈에 확인하세요.</p></div>
                 <div id="dashboard-content" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
             </div>
 
-            <!-- 상대 전적 비교 뷰 -->
             <div id="compare-view" class="hidden fade-in">
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">상대 전적 비교</h2><p class="text-gray-400 mt-2 mb-6">두 명의 선수를 선택하여 전적을 비교해보세요.</p></div>
                 <div class="flex justify-center items-center gap-4 mb-6">
@@ -69,7 +62,6 @@
                 <div id="compare-result" class="bg-gray-900/50 p-6 rounded-lg min-h-[200px]"></div>
             </div>
             
-            <!-- 선수 등록 뷰 -->
             <div id="player-registration-view" class="hidden fade-in">
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">선수 등록 및 관리</h2><p class="text-gray-400 mt-2 mb-6">리그에 참여할 선수를 등록하거나, 기존 선수의 점수를 관리합니다.</p></div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -87,7 +79,6 @@
                 </div>
             </div>
 
-            <!-- 게임 생성 뷰 -->
             <div id="game-creation-view" class="hidden fade-in">
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">게임 생성</h2><p class="text-gray-400 mt-2 mb-6">이번 게임에 참여할 선수를 선택하고, 게임 모드를 골라주세요.</p></div>
                 <div class="flex justify-center mb-6">
@@ -111,13 +102,11 @@
                 </div>
             </div>
             
-            <!-- 명예의 전당 뷰 -->
             <div id="hall-of-fame-view" class="hidden fade-in">
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">명예의 전당</h2><p class="text-gray-400 mt-2 mb-6">이번 시즌을 빛낸 최고의 플레이어들입니다.</p></div>
                 <div id="hall-of-fame-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
             </div>
 
-            <!-- 커스텀 팀 생성 뷰 (드래그 앤 드롭) -->
             <div id="custom-team-view" class="hidden fade-in">
                  <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">커스텀 팀 만들기</h2><p class="text-gray-400 mt-2 mb-6">선수 카드를 드래그하여 팀 슬롯에 배정하세요.</p></div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -136,7 +125,6 @@
                 </div>
             </div>
 
-            <!-- 랭킹 뷰 -->
             <div id="ranking-view" class="hidden fade-in">
                 <div class="bg-gray-700 rounded-lg p-4">
                     <table class="w-full text-left">
@@ -146,7 +134,6 @@
                 </div>
             </div>
             
-            <!-- 전적 보기 뷰 -->
             <div id="history-view" class="hidden fade-in">
                 <div class="text-center mb-6"><h2 class="text-2xl font-bold text-center text-cyan-400">게임 기록</h2>
                 <div class="flex justify-center gap-4 mt-4">
@@ -162,7 +149,6 @@
                 <div id="game-history-list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2"></div>
             </div>
 
-            <!-- 결과 뷰 -->
             <div id="result-section" class="hidden fade-in">
                 <div class="text-center"><h2 class="text-3xl font-bold text-center text-cyan-400">팀 배정 결과</h2><p class="text-gray-400 mt-2 mb-8">행운을 빌어요!</p></div>
                 <div id="teams-container" class="grid grid-cols-1 md:grid-cols-2 gap-5"></div>
@@ -172,7 +158,6 @@
                 </div>
             </div>
 
-            <!-- 전적 기록 뷰 -->
             <div id="record-view" class="hidden fade-in">
                 <div class="text-center"><h2 class="text-3xl font-bold text-center text-cyan-400">게임 결과 기록</h2><p class="text-gray-400 mt-2 mb-8">각 팀/플레이어의 최종 등수를 입력하세요.</p></div>
                 <div id="record-list" class="space-y-4 max-w-lg mx-auto"></div>
@@ -180,7 +165,6 @@
                 <div class="text-center mt-8"><button id="save-record-btn" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-indigo-700">저장 및 랭킹 업데이트</button></div>
             </div>
             
-            <!-- 데이터 관리 뷰 -->
             <div id="data-management-view" class="hidden fade-in">
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">데이터 관리</h2><p class="text-gray-400 mt-2 mb-6">리그 데이터를 백업하거나 다른 기기로 옮길 수 있습니다.</p></div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -206,7 +190,6 @@
                 </div>
             </div>
 
-            <!-- 패치노트 뷰 -->
             <div id="patch-notes-view" class="hidden fade-in">
                 <div class="text-center"><h2 class="text-2xl font-bold text-center text-cyan-400">패치노트</h2></div>
                 <div class="mt-6 space-y-8 text-gray-300 max-h-[60vh] overflow-y-auto pr-4">
@@ -224,7 +207,6 @@
         </div>
     </div>
 
-    <!-- 모달 및 토스트 -->
     <div id="modal" class="modal-overlay hidden fade-in"><div class="modal-content bg-gray-700 rounded-lg shadow-xl p-6 w-full max-w-lg border border-gray-600"><h3 id="modal-title" class="text-xl font-bold text-cyan-400 mb-4"></h3><div id="modal-body"></div><div id="modal-actions" class="mt-6 flex justify-end gap-3"></div></div></div>
     <div id="toast" class="hidden fixed bottom-10 right-10 bg-green-500 text-white py-2 px-5 rounded-lg shadow-lg fade-in"></div>
 
